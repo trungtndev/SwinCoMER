@@ -133,8 +133,8 @@ def collate_fn(batch):
     widths_x = [s.size(2) for s in images_x]
 
     n_samples = len(heights_x)
-    max_height_x = max(heights_x)
-    max_width_x = max(widths_x)
+    max_height_x = 224
+    max_width_x = 448
 
     x = torch.zeros(n_samples, 1, max_height_x, max_width_x)
     x_mask = torch.ones(n_samples, max_height_x, max_width_x, dtype=torch.bool)

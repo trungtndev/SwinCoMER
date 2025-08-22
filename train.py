@@ -38,7 +38,7 @@ def train(config: Config):
     trainer = pl.Trainer(
         val_check_interval=1.0,
         num_sanity_val_steps=0,
-        # limit_train_batches=1.0,
+        # limit_train_batches=1,
 
         limit_val_batches=0.05,
         # limit_test_batches=1.0,
@@ -50,7 +50,7 @@ def train(config: Config):
         max_epochs=config.trainer.max_epochs,
         deterministic=config.trainer.deterministic,
 
-        plugins=DDPPlugin(find_unused_parameters=False),
+        plugins=DDPPlugin(find_unused_parameters=True),
         # logger=logger,
         callbacks=[lr_callback, checkpoint_callback],
     )

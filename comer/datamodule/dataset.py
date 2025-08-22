@@ -7,9 +7,9 @@ K_MIN = 0.7
 K_MAX = 1.4
 
 H_LO = 16
-H_HI = 256
+H_HI = 224
 W_LO = 16
-W_HI = 1024
+W_HI = 448
 
 
 class CROHMEDataset(Dataset):
