@@ -134,7 +134,7 @@ def collate_fn(batch):
 
     n_samples = len(heights_x)
     max_height_x = 224
-    max_width_x = 448
+    max_width_x = 672
 
     x = torch.zeros(n_samples, 1, max_height_x, max_width_x)
     x_mask = torch.ones(n_samples, max_height_x, max_width_x, dtype=torch.bool)

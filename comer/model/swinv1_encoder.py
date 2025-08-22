@@ -14,13 +14,13 @@ class SwinEncoder(pl.LightningModule):
     def __init__(self, d_model: int):
         super().__init__()
         self.swin = SwinTransformer(
-            img_size=(224, 448),
+            img_size=(224, 672),
             in_chans=1,
-            embed_dim=96,
+            embed_dim=12,
             patch_size=4,
             window_size=7,
 
-            depths=[2,2,6,2],
+            depths=[2,2,4,2],
             num_heads=[3,6,12,24],
             drop_path_rate=0.1,
             drop_rate=0.1,
@@ -28,7 +28,7 @@ class SwinEncoder(pl.LightningModule):
             drop_path2=0.1,
             attn_drop_rate=0.1,
 
-            mlp_ratio=4,
+            mlp_ratio=1,
         )
         self.linear = nn.Linear(self.swin.num_features, d_model)
     def forward(
