@@ -31,7 +31,6 @@ class SwinEncoder(pl.LightningModule):
     ) -> Tuple[FloatTensor, Optional[BoolTensor] | None]:
         img_feature, padding_mask = self.swin(x=img, padding_mask=padding_mask)
         img_feature = self.linear(img_feature)
-        print(self.swin.patches_resolution)
         img_feature = rearrange(
             img_feature, "b (h w) d -> b h w d", h=self.swin.patches_resolution[0] // (2 ** 3)
         )
