@@ -3,6 +3,8 @@ from typing import Tuple, Optional
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from timm.layers import drop_path
+
 from .swinv1 import SwinTransformer
 from torch import FloatTensor, LongTensor, BoolTensor, nn
 from einops import rearrange
@@ -18,10 +20,13 @@ class SwinEncoder(pl.LightningModule):
             patch_size=4,
             window_size=7,
 
-
             depths=[2,2,6,2],
             num_heads=[3,6,12,24],
-            drop_path_rate=0.2,
+            drop_path_rate=0.1,
+            drop_rate=0.1,
+            drop_path=0.1,
+            drop_path2=0.1,
+            attn_drop_rate=0.1,
 
             mlp_ratio=4,
         )
