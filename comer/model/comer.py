@@ -26,10 +26,10 @@ class CoMER(pl.LightningModule):
     ):
         super().__init__()
 
-        # self.encoder = Encoder(
-        #     d_model=d_model, growth_rate=growth_rate, num_layers=num_layers
-        # )
-        self.encoder = SwinEncoder(d_model=d_model)
+        self.encoder = Encoder(
+            d_model=d_model, growth_rate=growth_rate, num_layers=num_layers
+        )
+        # self.encoder = SwinEncoder(d_model=d_model)
         self.decoder = Decoder(
             d_model=d_model,
             nhead=nhead,
