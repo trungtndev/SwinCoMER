@@ -21,6 +21,10 @@ trainer:
   limit_val_batches: 1.0
   num_sanity_val_steps: 0
 
+wandb:
+ name: "origin_hme100k"
+ project: "SwinCOMER"
+ log_model: "all"
 
 model:
   d_model: 256
