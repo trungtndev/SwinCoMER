@@ -17,6 +17,11 @@ trainer:
   check_val_every_n_epoch: 2
   max_epochs: 300
   deterministic: true
+  val_check_interval: 1.0
+  limit_val_batches: 1.0
+  num_sanity_val_steps: 0
+
+
 model:
   d_model: 256
   # encoder

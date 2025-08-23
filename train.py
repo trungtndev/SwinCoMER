@@ -36,12 +36,10 @@ def train(config: Config):
     )
 
     trainer = pl.Trainer(
-        val_check_interval=1.0,
-        num_sanity_val_steps=0,
-        # limit_train_batches=1.0,
-
-        limit_val_batches=0.05,
-        # limit_test_batches=1.0,
+        checkpoint_callback=config.trainer.checkpoint_callback,
+        val_check_interval=config.trainer.val_check_interval,
+        num_sanity_val_steps=config.trainer.num_sanity_val_steps,
+        limit_val_batches=config.trainer.limit_val_batches,
 
 
         gpus=config.trainer.gpus,
