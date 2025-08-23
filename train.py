@@ -49,9 +49,8 @@ def train(config: Config):
         check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
         max_epochs=config.trainer.max_epochs,
         deterministic=config.trainer.deterministic,
-
-        plugins=DDPPlugin(find_unused_parameters=False),
         # logger=logger,
+        plugins=DDPPlugin(find_unused_parameters=False),
         callbacks=[lr_callback, checkpoint_callback],
     )
 
