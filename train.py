@@ -17,11 +17,11 @@ def train(config: Config):
     data_module = CROHMEDatamodule(
         **dict(config.data),
     )
-    logger = Logger(
-        **dict(config.wandb),
-        config=dict(config),
-    )
-    logger.watch(model_module, log="all", log_freq=50)
+    # logger = Logger(
+    #     **dict(config.wandb),
+    #     config=dict(config),
+    # )
+    # logger.watch(model_module, log="all", log_freq=50)
 
     lr_callback = pl.callbacks.LearningRateMonitor(
         **dict(config.trainer.callbacks[0].init_args),
@@ -36,6 +36,7 @@ def train(config: Config):
         val_check_interval=config.trainer.val_check_interval,
         num_sanity_val_steps=config.trainer.num_sanity_val_steps,
         limit_val_batches=config.trainer.limit_val_batches,
+        resume_from_checkpoint=config.trainer.resume_from_checkpoint,
 
         gpus=config.trainer.gpus,
         accelerator=config.trainer.accelerator,
