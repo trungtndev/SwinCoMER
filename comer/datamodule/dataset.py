@@ -29,15 +29,22 @@ class CROHMEDataset(Dataset):
         ]
         self.transform = tr.Compose(trans_list)
 
+    # def __getitem__(self, idx):
+    #     fname, _, caption = self.ds[idx]
+    #
+    #     img = [
+    #         self.transform(
+    #             np.array(Image.open(f))
+    #         )
+    #         for f in fname
+    #     ]
+    #
+    #     return fname, img, caption
     def __getitem__(self, idx):
-        fname, _, caption = self.ds[idx]
-
-        img = [
-            self.transform(
-                np.array(Image.open(f))
-            )
-            for f in fname
-        ]
+        fname, caption = self.ds[idx]
+        img = Image.open(fname)
+        img = np.array(img)
+        img = self.transform(img)
 
         return fname, img, caption
 

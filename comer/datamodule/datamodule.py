@@ -99,10 +99,7 @@ def extract_data(archive: str, dir_name: str) -> Data:
         formula = tmp[1:]
 
         img_path = f"{archive}/{dir_name}/img/{img_name}.bmp"
-        img = Image.open(img_path).copy()
-
-        data.append((img_path, img.size, formula))
-        del img  # free memory
+        data.append((img_path, formula))
 
     print(f"Extract data from: {dir_name}, with data size: {len(data)}")
 
@@ -128,12 +125,35 @@ class Batch:
         )
 
 
+# def collate_fn(batch):
+#     assert len(batch) == 1
+#     batch = batch[0]
+#     fnames = batch[0]
+#     images_x = batch[1]
+#     seqs_y = [vocab.words2indices(x) for x in batch[2]]
+#
+#     heights_x = [s.size(1) for s in images_x]
+#     widths_x = [s.size(2) for s in images_x]
+#
+#     n_samples = len(heights_x)
+#     max_height_x = max(heights_x)
+#     max_width_x = max(widths_x)
+#
+#     x = torch.zeros(n_samples, 1, max_height_x, max_width_x)
+#     x_mask = torch.ones(n_samples, max_height_x, max_width_x, dtype=torch.bool)
+#     for idx, s_x in enumerate(images_x):
+#         x[idx, :, : heights_x[idx], : widths_x[idx]] = s_x
+#         x_mask[idx, : heights_x[idx], : widths_x[idx]] = 0
+#
+#     # return fnames, x, x_mask, seqs_y
+#     return Batch(fnames, x, x_mask, seqs_y)
+
 def collate_fn(batch):
-    assert len(batch) == 1
-    batch = batch[0]
-    fnames = batch[0]
-    images_x = batch[1]
-    seqs_y = [vocab.words2indices(x) for x in batch[2]]
+    # assert len(batch) == 1
+    # batch = batch[0]
+    fnames = [item[0] for item in batch]
+    images_x = [item[1] for item in batch]
+    seqs_y = [vocab.words2indices(item[2]) for item in batch]
 
     heights_x = [s.size(1) for s in images_x]
     widths_x = [s.size(2) for s in images_x]
@@ -182,18 +202,21 @@ class CROHMEDatamodule(pl.LightningDataModule):
         # with ZipFile(self.zipfile_path) as archive:
             if stage == "fit" or stage is None:
                 self.train_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, "train", self.train_batch_size),
+                    # build_dataset(self.zipfile_path, "train", self.train_batch_size),
+                    extract_data(self.zipfile_path, "train"),
                     True,
                     self.scale_aug,
                 )
                 self.val_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                    # build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                    extract_data(self.zipfile_path, self.test_year),
                     False,
                     self.scale_aug,
                 )
             if stage == "test" or stage is None:
                 self.test_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                    # build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                    extract_data(self.zipfile_path, self.test_year),
                     False,
                     self.scale_aug,
                 )
@@ -201,6 +224,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
+            batch_size=self.train_batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
@@ -209,6 +233,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
+            batch_size=self.eval_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
@@ -217,6 +242,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
+            batch_size=self.eval_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
