@@ -1,5 +1,3 @@
-import numpy as np
-from PIL import Image
 import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
 
@@ -30,14 +28,9 @@ class CROHMEDataset(Dataset):
         self.transform = tr.Compose(trans_list)
 
     def __getitem__(self, idx):
-        fname, _, caption = self.ds[idx]
+        fname, img, caption = self.ds[idx]
 
-        img = [
-            self.transform(
-                np.array(Image.open(f))
-            )
-            for f in fname
-        ]
+        img = [self.transform(im) for im in img]
 
         return fname, img, caption
 

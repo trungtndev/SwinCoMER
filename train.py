@@ -38,11 +38,7 @@ def train(config: Config):
     trainer = pl.Trainer(
         val_check_interval=1.0,
         num_sanity_val_steps=0,
-        # limit_train_batches=1.0,
-
         limit_val_batches=0.05,
-        # limit_test_batches=1.0,
-
 
         gpus=config.trainer.gpus,
         accelerator=config.trainer.accelerator,

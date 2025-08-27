@@ -40,9 +40,9 @@ model:
   learning_rate: 0.08
   patience: 20
 data:
-  zipfile_path: data
+  zipfile_path: data.zip
   test_year: "2014"
   train_batch_size: 8
   eval_batch_size: 4
-  num_workers: 4
+  num_workers: 5
   scale_aug: true
