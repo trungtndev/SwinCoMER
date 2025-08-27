@@ -182,3 +182,10 @@ class Encoder(pl.LightningModule):
 
         # flat to 1-D
         return feature, mask
+if __name__ == "__main__":
+    model = Encoder(d_model=96)
+    x = torch.randn(2, 1, 224, 224)
+    mask = torch.ones(2, 224, 224).bool()
+    out, mask = model(x, mask)
+    print(out.shape)
+    print(mask.shape)
