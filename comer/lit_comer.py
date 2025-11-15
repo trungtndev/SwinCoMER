@@ -104,8 +104,6 @@ class LitCoMER(pl.LightningModule):
         )
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
-        print([h.seq for h in hyps][0])
-
         self.exprate_recorder([h.seq for h in hyps], [tokenizer.encode(s) for s in batch.seq])
         self.log(
             "val_ExpRate",
