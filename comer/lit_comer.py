@@ -135,17 +135,16 @@ class LitCoMER(pl.LightningModule):
         return self.comer_model.beam_search(img, mask, **self.hparams)
 
     def configure_optimizers(self):
-        optimizer = optim.SGD(
+        optimizer = optim.AdamW(
             self.parameters(),
             lr=self.hparams.learning_rate,
-            momentum=0.9,
             weight_decay=1e-4,
         )
 
         reduce_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             mode="max",
-            factor=0.25,
+            factor=0.5,
             patience=self.hparams.patience // self.trainer.check_val_every_n_epoch,
         )
         scheduler = {

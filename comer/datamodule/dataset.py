@@ -32,7 +32,7 @@ class CROHMEDataset(Dataset):
 
     def __getitem__(self, idx):
         fname, caption = self.ds[idx]
-        img = Image.open(fname)
+        img = Image.open(fname)#.convert("RGB")
         img = self.transform(img)
 
         return fname, img, " ".join(caption)
