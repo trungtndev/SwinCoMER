@@ -6,7 +6,7 @@ from einops import rearrange
 from torch import FloatTensor, LongTensor
 from transformers import PreTrainedTokenizerFast
 
-# from comer.datamodule import vocab, vocab_size
+from comer.datamodule import tokenizer
 from comer.model.pos_enc import WordPosEnc
 from comer.model.transformer.arm import AttentionRefinementModule
 from comer.model.transformer.transformer_decoder import (
@@ -54,7 +54,7 @@ class Decoder(DecodeModel):
         self_coverage: bool,
     ):
         super().__init__()
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained("./bpe_hf_tokenizer")
+        self.tokenizer = tokenizer
         self.vocab_size = self.tokenizer.vocab_size
 
 
