@@ -9,7 +9,7 @@ from einops.einops import rearrange
 from torch import FloatTensor, LongTensor
 
 from .pos_enc import ImgPosEnc
-
+from .transformer.transfomer_encoder import TransformerEncoder, TransformerEncoderLayer
 
 # DenseNet-B
 class _Bottleneck(nn.Module):
@@ -140,6 +140,11 @@ class DenseNet(nn.Module):
         return out, out_mask
 
 
+
+
+
+
+
 class Encoder(pl.LightningModule):
     def __init__(self, d_model: int, growth_rate: int, num_layers: int):
         super().__init__()
@@ -151,6 +156,13 @@ class Encoder(pl.LightningModule):
         self.pos_enc_2d = ImgPosEnc(d_model, normalize=True)
 
         self.norm = nn.LayerNorm(d_model)
+
+        self.transformer_encoder = TransformerEncoder(
+            TransformerEncoderLayer(d_model=d_model, nhead=8, dim_feedforward=128, dropout=0.1),
+            num_layers=3,
+            # norm=nn.LayerNorm(d_model),
+            # norm=None
+        )
 
     def forward(
         self, img: FloatTensor, img_mask: LongTensor
@@ -180,5 +192,14 @@ class Encoder(pl.LightningModule):
         feature = self.pos_enc_2d(feature, mask)
         feature = self.norm(feature)
 
-        # flat to 1-D
-        return feature, mask
+        # feature: [b, h, w, d]
+        b, h, w, d = feature.shape
+
+        src = rearrange(feature, "b h w d -> (h w) b d")
+        key_padding = rearrange(mask, "b h w -> b (h w)")
+
+        encoded = self.transformer_encoder(src, src_mask=None, src_key_padding_mask=key_padding)
+
+        encoded = rearrange(encoded, "(h w) b d -> b h w d", h=h, w=w)
+
+        return encoded, mask

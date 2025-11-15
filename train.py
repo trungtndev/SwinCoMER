@@ -2,13 +2,15 @@ import argparse
 import os
 import wandb
 from pytorch_lightning.loggers import WandbLogger as Logger
+from timm.models import resume_checkpoint
+
 from comer.datamodule import CROHMEDatamodule
 from comer.lit_comer import LitCoMER
 from sconf import Config
 import pytorch_lightning as pl
 from pytorch_lightning.plugins.training_type.ddp import DDPPlugin
 
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def train(config: Config):
     pl.seed_everything(config.seed_everything, workers=True)
     model_module = LitCoMER(

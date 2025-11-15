@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from comer.datamodule import vocab
+from comer.datamodule import tokenizer, vocab
 from einops import rearrange
 from torch import LongTensor
 from torchmetrics import Metric
@@ -48,8 +48,13 @@ class ExpRateRecorder(Metric):
 
     def update(self, indices_hat: List[List[int]], indices: List[List[int]]):
         for pred, truth in zip(indices_hat, indices):
-            pred = vocab.indices2label(pred)
-            truth = vocab.indices2label(truth)
+            # print(pred)
+            # print(truth)
+            # pred = vocab.indices2label(pred)
+            # truth = vocab.indices2label(truth)
+            pred = tokenizer.decode(pred)
+            truth = tokenizer.decode(truth)
+
 
             is_same = pred == truth
 
@@ -66,7 +71,7 @@ class ExpRateRecorder(Metric):
 def ce_loss(
     output_hat: torch.Tensor,
     output: torch.Tensor,
-    ignore_idx: int = vocab.PAD_IDX,
+    ignore_idx: int = tokenizer.pad_token_id,
     reduction: str = "mean",
 ) -> torch.Tensor:
     """comput cross-entropy loss
@@ -86,7 +91,7 @@ def ce_loss(
 
 
 def to_tgt_output(
-    tokens: Union[List[List[int]], List[LongTensor]],
+    tokens: Union[List[List[int]], List[LongTensor], List[str]],
     direction: str,
     device: torch.device,
     pad_to_len: Optional[int] = None,
@@ -110,15 +115,17 @@ def to_tgt_output(
 
     if isinstance(tokens[0], list):
         tokens = [torch.tensor(t, dtype=torch.long) for t in tokens]
+    elif isinstance(tokens[0], str):
+        tokens = [torch.tensor(tokenizer.encode(t), dtype=torch.long) for t in tokens]
 
     if direction == "l2r":
         tokens = tokens
-        start_w = vocab.SOS_IDX
-        stop_w = vocab.EOS_IDX
+        start_w = tokenizer.bos_token_id
+        stop_w = tokenizer.eos_token_id
     else:
         tokens = [torch.flip(t, dims=[0]) for t in tokens]
-        start_w = vocab.EOS_IDX
-        stop_w = vocab.SOS_IDX
+        start_w = tokenizer.eos_token_id
+        stop_w = tokenizer.bos_token_id
 
     batch_size = len(tokens)
     lens = [len(t) for t in tokens]
@@ -129,13 +136,13 @@ def to_tgt_output(
 
     tgt = torch.full(
         (batch_size, length),
-        fill_value=vocab.PAD_IDX,
+        fill_value=tokenizer.pad_token_id,
         dtype=torch.long,
         device=device,
     )
     out = torch.full(
         (batch_size, length),
-        fill_value=vocab.PAD_IDX,
+        fill_value=tokenizer.pad_token_id,
         dtype=torch.long,
         device=device,
     )
@@ -151,7 +158,7 @@ def to_tgt_output(
 
 
 def to_bi_tgt_out(
-    tokens: List[List[int]], device: torch.device
+    tokens: List[str], device: torch.device
 ) -> Tuple[LongTensor, LongTensor]:
     """Generate bidirection tgt and out
 

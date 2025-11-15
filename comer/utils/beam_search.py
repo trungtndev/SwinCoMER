@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 import torch
-from comer.datamodule import vocab
+from comer.datamodule import tokenizer
 from torch import FloatTensor, LongTensor
 
 
@@ -81,7 +81,7 @@ class BeamSearchScorer:
                 assert len(beam_hyp) >= self.beam_size
                 # pad the batch
                 next_beam_scores[batch_idx, :] = 0
-                next_beam_tokens[batch_idx, :] = vocab.PAD_IDX
+                next_beam_tokens[batch_idx, :] = tokenizer.pad_token_id
                 next_beam_indices[batch_idx, :] = batch_idx * self.beam_size
                 continue
 
@@ -95,12 +95,12 @@ class BeamSearchScorer:
             ):
                 batch_beam_idx = batch_idx * self.beam_size + next_index
                 l2r_done = (
-                    input_ids[batch_beam_idx][0].item() == vocab.SOS_IDX
-                    and next_token.item() == vocab.EOS_IDX
+                    input_ids[batch_beam_idx][0].item() == tokenizer.bos_token_id
+                    and next_token.item() == tokenizer.eos_token_id
                 )
                 r2l_done = (
-                    input_ids[batch_beam_idx][0].item() == vocab.EOS_IDX
-                    and next_token.item() == vocab.SOS_IDX
+                    input_ids[batch_beam_idx][0].item() == tokenizer.eos_token_id
+                    and next_token.item() == tokenizer.bos_token_id
                 )
                 if l2r_done or r2l_done:
                     if beam_token_rank >= self.beam_size:

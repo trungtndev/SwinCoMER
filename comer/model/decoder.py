@@ -4,8 +4,9 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 from torch import FloatTensor, LongTensor
+from transformers import PreTrainedTokenizerFast
 
-from comer.datamodule import vocab, vocab_size
+# from comer.datamodule import vocab, vocab_size
 from comer.model.pos_enc import WordPosEnc
 from comer.model.transformer.arm import AttentionRefinementModule
 from comer.model.transformer.transformer_decoder import (
@@ -53,9 +54,12 @@ class Decoder(DecodeModel):
         self_coverage: bool,
     ):
         super().__init__()
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained("./bpe_hf_tokenizer")
+        self.vocab_size = self.tokenizer.vocab_size
+
 
         self.word_embed = nn.Sequential(
-            nn.Embedding(vocab_size, d_model), nn.LayerNorm(d_model)
+            nn.Embedding(self.vocab_size, d_model), nn.LayerNorm(d_model)
         )
 
         self.pos_enc = WordPosEnc(d_model=d_model)
@@ -73,7 +77,7 @@ class Decoder(DecodeModel):
             self_coverage=self_coverage,
         )
 
-        self.proj = nn.Linear(d_model, vocab_size)
+        self.proj = nn.Linear(d_model, self.vocab_size)
 
     def _build_attention_mask(self, length):
         # lazily create causal attention mask, with full attention between the vision tokens
@@ -105,7 +109,7 @@ class Decoder(DecodeModel):
         """
         _, l = tgt.size()
         tgt_mask = self._build_attention_mask(l)
-        tgt_pad_mask = tgt == vocab.PAD_IDX
+        tgt_pad_mask = (tgt == self.tokenizer.pad_token_id)
 
         tgt = self.word_embed(tgt)  # [b, l, d]
         tgt = self.pos_enc(tgt)  # [b, l, d]

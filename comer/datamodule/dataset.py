@@ -20,33 +20,22 @@ class CROHMEDataset(Dataset):
         self.ds = ds
 
         trans_list = []
-        if is_train and scale_aug:
-            trans_list.append(ScaleAugmentation(K_MIN, K_MAX))
+        # if is_train and scale_aug:
+        #     trans_list.append(ScaleAugmentation(K_MIN, K_MAX))
 
         trans_list += [
-            ScaleToLimitRange(w_lo=W_LO, w_hi=W_HI, h_lo=H_LO, h_hi=H_HI),
+            # ScaleToLimitRange(w_lo=W_LO, w_hi=W_HI, h_lo=H_LO, h_hi=H_HI),
             tr.ToTensor(),
+            tr.Resize((224, 448))
         ]
         self.transform = tr.Compose(trans_list)
 
-    # def __getitem__(self, idx):
-    #     fname, _, caption = self.ds[idx]
-    #
-    #     img = [
-    #         self.transform(
-    #             np.array(Image.open(f))
-    #         )
-    #         for f in fname
-    #     ]
-    #
-    #     return fname, img, caption
     def __getitem__(self, idx):
         fname, caption = self.ds[idx]
         img = Image.open(fname)
-        img = np.array(img)
         img = self.transform(img)
 
-        return fname, img, caption
+        return fname, img, " ".join(caption)
 
     def __len__(self):
         return len(self.ds)

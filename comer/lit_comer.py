@@ -2,10 +2,11 @@ import zipfile
 from typing import List
 
 import pytorch_lightning as pl
+import torch
 import torch.optim as optim
 from torch import FloatTensor, LongTensor
 
-from comer.datamodule import Batch, vocab
+from comer.datamodule import Batch, tokenizer
 from comer.model.comer import CoMER
 from comer.utils.utils import (ExpRateRecorder, Hypothesis, ce_loss,
                                to_bi_tgt_out)
@@ -13,28 +14,28 @@ from comer.utils.utils import (ExpRateRecorder, Hypothesis, ce_loss,
 
 class LitCoMER(pl.LightningModule):
     def __init__(
-        self,
-        d_model: int,
-        # encoder
-        growth_rate: int,
-        num_layers: int,
-        # decoder
-        nhead: int,
-        num_decoder_layers: int,
-        dim_feedforward: int,
-        dropout: float,
-        dc: int,
-        cross_coverage: bool,
-        self_coverage: bool,
-        # beam search
-        beam_size: int,
-        max_len: int,
-        alpha: float,
-        early_stopping: bool,
-        temperature: float,
-        # training
-        learning_rate: float,
-        patience: int,
+            self,
+            d_model: int,
+            # encoder
+            growth_rate: int,
+            num_layers: int,
+            # decoder
+            nhead: int,
+            num_decoder_layers: int,
+            dim_feedforward: int,
+            dropout: float,
+            dc: int,
+            cross_coverage: bool,
+            self_coverage: bool,
+            # beam search
+            beam_size: int,
+            max_len: int,
+            alpha: float,
+            early_stopping: bool,
+            temperature: float,
+            # training
+            learning_rate: float,
+            patience: int,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -55,7 +56,7 @@ class LitCoMER(pl.LightningModule):
         self.exprate_recorder = ExpRateRecorder()
 
     def forward(
-        self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
+            self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
     ) -> FloatTensor:
         """run img and bi-tgt
 
@@ -76,16 +77,19 @@ class LitCoMER(pl.LightningModule):
         return self.comer_model(img, img_mask, tgt)
 
     def training_step(self, batch: Batch, _):
-        tgt, out = to_bi_tgt_out(batch.indices, self.device)
+        tgt, out = to_bi_tgt_out(batch.seq, self.device)
+        batch_size = batch.mask.size(0)
         out_hat = self(batch.imgs, batch.mask, tgt)
 
         loss = ce_loss(out_hat, out)
-        self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
 
         return loss
 
     def validation_step(self, batch: Batch, _):
-        tgt, out = to_bi_tgt_out(batch.indices, self.device)
+        tgt, out = to_bi_tgt_out(batch.seq, self.device)
+        batch_size = batch.mask.size(0)
+
         out_hat = self(batch.imgs, batch.mask, tgt)
 
         loss = ce_loss(out_hat, out)
@@ -96,11 +100,13 @@ class LitCoMER(pl.LightningModule):
             on_epoch=True,
             prog_bar=True,
             sync_dist=True,
+            batch_size=batch_size,
         )
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
+        print([h.seq for h in hyps][0])
 
-        self.exprate_recorder([h.seq for h in hyps], batch.indices)
+        self.exprate_recorder([h.seq for h in hyps], [tokenizer.encode(s) for s in batch.seq])
         self.log(
             "val_ExpRate",
             self.exprate_recorder,
@@ -111,7 +117,7 @@ class LitCoMER(pl.LightningModule):
 
     def test_step(self, batch: Batch, _):
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
-        self.exprate_recorder([h.seq for h in hyps], batch.indices)
+        self.exprate_recorder([h.seq for h in hyps], [tokenizer.encode(s) for s in batch.seq])
         return batch.img_bases, [vocab.indices2label(h.seq) for h in hyps]
 
     def test_epoch_end(self, test_outputs) -> None:
@@ -126,7 +132,7 @@ class LitCoMER(pl.LightningModule):
                         f.write(content)
 
     def approximate_joint_search(
-        self, img: FloatTensor, mask: LongTensor
+            self, img: FloatTensor, mask: LongTensor
     ) -> List[Hypothesis]:
         return self.comer_model.beam_search(img, mask, **self.hparams)
 

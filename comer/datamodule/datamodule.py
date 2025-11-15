@@ -13,70 +13,10 @@ from PIL import Image
 from torch import FloatTensor, LongTensor
 from torch.utils.data.dataloader import DataLoader
 
-from .vocab import vocab
-
 # Data = List[Tuple[str, Image.Image, List[str]]]
 Data = List[Tuple[str, Tuple[int, int], List[str]]]
 
 MAX_SIZE = 32e4  # change here accroading to your GPU memory
-
-# load data
-def data_iterator(
-    data: Data,
-    batch_size: int,
-    batch_Imagesize: int = MAX_SIZE,
-    maxlen: int = 200,
-    maxImagesize: int = MAX_SIZE,
-):
-    fname_batch = []
-    feature_batch = []
-    label_batch = []
-    feature_total = []
-    label_total = []
-    fname_total = []
-    biggest_image_size = 0
-
-    data.sort(key=lambda x: x[1][0] * x[1][1])
-    print("data_iterator...")
-    i = 0
-    for fname, imsize, lab in tqdm(data):
-        size = imsize[0] * imsize[1]
-        # fea = np.array(fea)
-        if size > biggest_image_size:
-            biggest_image_size = size
-        batch_image_size = biggest_image_size * (i + 1)
-        if len(lab) > maxlen:
-            print("sentence", i, "length bigger than", maxlen, "ignore")
-        elif size > maxImagesize:
-            print(
-                f"image: {fname} size: {imsize[0]} x {imsize[1]} =  bigger than {maxImagesize}, ignore"
-            )
-        else:
-            if batch_image_size > batch_Imagesize or i == batch_size:  # a batch is full
-                fname_total.append(fname_batch)
-                feature_total.append(feature_batch)
-                label_total.append(label_batch)
-                i = 0
-                biggest_image_size = size
-                fname_batch = []
-                feature_batch = []
-                label_batch = []
-                fname_batch.append(fname)
-                # feature_batch.append(fea)
-                label_batch.append(lab)
-                i += 1
-            else:
-                fname_batch.append(fname)
-                # feature_batch.append(fea)
-                label_batch.append(lab)
-                i += 1
-
-    # last batch
-    fname_total.append(fname_batch)
-    feature_total.append(feature_batch)
-    label_total.append(label_batch)
-    print("total ", len(fname_total), "batch data loaded")
-    return list(zip(fname_total, feature_total, label_total))
 
 
 def extract_data(archive: str, dir_name: str) -> Data:
@@ -111,7 +51,7 @@ class Batch:
     img_bases: List[str]  # [b,]
     imgs: FloatTensor  # [b, 1, H, W]
     mask: LongTensor  # [b, H, W]
-    indices: List[List[int]]  # [b, l]
+    seq: List[str]  # [b,]
 
     def __len__(self) -> int:
         return len(self.img_bases)
@@ -121,16 +61,34 @@ class Batch:
             img_bases=self.img_bases,
             imgs=self.imgs.to(device),
             mask=self.mask.to(device),
-            indices=self.indices,
+            seq=self.seq,
         )
 
 
+# @dataclass
+# class Batch:
+#     img_bases: List[str]  # [b,]
+#     imgs: FloatTensor  # [b, 1, H, W]
+#     mask: LongTensor  # [b, H, W]
+#     indices: List[List[int]]  # [b, l]
+#
+#     def __len__(self) -> int:
+#         return len(self.img_bases)
+#
+#     def to(self, device) -> "Batch":
+#         return Batch(
+#             img_bases=self.img_bases,
+#             imgs=self.imgs.to(device),
+#             mask=self.mask.to(device),
+#             indices=self.indices,
+#         )
+
 # def collate_fn(batch):
-#     assert len(batch) == 1
-#     batch = batch[0]
-#     fnames = batch[0]
-#     images_x = batch[1]
-#     seqs_y = [vocab.words2indices(x) for x in batch[2]]
+#     # assert len(batch) == 1
+#     # batch = batch[0]
+#     fnames = [item[0] for item in batch]
+#     images_x = [item[1] for item in batch]
+#     seqs_y = [vocab.words2indices(item[2]) for item in batch]
 #
 #     heights_x = [s.size(1) for s in images_x]
 #     widths_x = [s.size(2) for s in images_x]
@@ -149,32 +107,20 @@ class Batch:
 #     return Batch(fnames, x, x_mask, seqs_y)
 
 def collate_fn(batch):
-    # assert len(batch) == 1
-    # batch = batch[0]
-    fnames = [item[0] for item in batch]
-    images_x = [item[1] for item in batch]
-    seqs_y = [vocab.words2indices(item[2]) for item in batch]
+    # batch = [(fname, img_tensor, caption), ...]
+    img_bases = [item[0] for item in batch]
+    imgs = torch.stack([item[1] for item in batch], dim=0)
+    seq = [item[2] for item in batch]
+    B, C, H, W = imgs.size()
 
-    heights_x = [s.size(1) for s in images_x]
-    widths_x = [s.size(2) for s in images_x]
+    mask = torch.zeros(B, H, W, dtype=torch.bool)
 
-    n_samples = len(heights_x)
-    max_height_x = max(heights_x)
-    max_width_x = max(widths_x)
-
-    x = torch.zeros(n_samples, 1, max_height_x, max_width_x)
-    x_mask = torch.ones(n_samples, max_height_x, max_width_x, dtype=torch.bool)
-    for idx, s_x in enumerate(images_x):
-        x[idx, :, : heights_x[idx], : widths_x[idx]] = s_x
-        x_mask[idx, : heights_x[idx], : widths_x[idx]] = 0
-
-    # return fnames, x, x_mask, seqs_y
-    return Batch(fnames, x, x_mask, seqs_y)
-
-
-def build_dataset(archive: str, folder: str, batch_size: int):
-    data = extract_data(archive, folder)
-    return data_iterator(data, batch_size)
+    return Batch(
+        img_bases=img_bases,
+        imgs=imgs,
+        mask=mask,
+        seq=seq
+    )
 
 
 class CROHMEDatamodule(pl.LightningDataModule):

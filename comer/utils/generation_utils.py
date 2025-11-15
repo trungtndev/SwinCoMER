@@ -4,7 +4,7 @@ from typing import List, Tuple
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from comer.datamodule import vocab, vocab_size
+from comer.datamodule import tokenizer
 from comer.utils.utils import Hypothesis, ce_loss, to_tgt_output
 from einops import rearrange
 from einops.einops import repeat
@@ -77,13 +77,13 @@ class DecodeModel(pl.LightningModule):
 
         l2r = torch.full(
             (batch_size // 2, 1),
-            fill_value=vocab.SOS_IDX,
+            fill_value=tokenizer.bos_token_id,
             dtype=torch.long,
             device=self.device,
         )
         r2l = torch.full(
             (batch_size // 2, 1),
-            fill_value=vocab.EOS_IDX,
+            fill_value=tokenizer.eos_token_id,
             dtype=torch.long,
             device=self.device,
         )
@@ -203,8 +203,8 @@ class DecodeModel(pl.LightningModule):
                 next_token_scores, 2 * beam_size, dim=1
             )
 
-            next_indices = next_tokens // vocab_size
-            next_tokens = next_tokens % vocab_size
+            next_indices = next_tokens // tokenizer.vocab_size
+            next_tokens = next_tokens % tokenizer.vocab_size
 
             if cur_len == 1:
                 input_ids = repeat(input_ids, "b l -> (b m) l", m=beam_size)
@@ -262,7 +262,7 @@ class DecodeModel(pl.LightningModule):
         loss = ce_loss(out_hat, out, reduction="none")
         loss = rearrange(loss, "(b l) -> b l", b=b)
 
-        mask = tgt == vocab.PAD_IDX
+        mask = tgt == tokenizer.pad_token_id
         penalty = (~mask).sum(dim=1) ** alpha
         loss = -torch.sum(loss, dim=1) / penalty
 
