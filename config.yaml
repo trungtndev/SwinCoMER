@@ -47,8 +47,12 @@ model:
   early_stopping: false
   temperature: 1.0
   # training
-  learning_rate: 0.08
+  learning_rate: 0.0004
   patience: 20
+  cosine_scheduler:
+    T_0: 2250 # 2250
+    T_mult: 4
+    eta_min: 0.000075
 data:
   zipfile_path: data
   test_year: "2014"

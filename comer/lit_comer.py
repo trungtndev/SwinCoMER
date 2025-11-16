@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 import torch.optim as optim
 from torch import FloatTensor, LongTensor
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 from comer.datamodule import Batch, tokenizer
 from comer.model.comer import CoMER
@@ -133,7 +134,8 @@ class LitCoMER(pl.LightningModule):
             self, img: FloatTensor, mask: LongTensor
     ) -> List[Hypothesis]:
         return self.comer_model.beam_search(img, mask, **self.hparams)
-
+    def lr_scheduler_step(self, scheduler, optimizer_idx, metric):
+        scheduler.step()
     def configure_optimizers(self):
         optimizer = optim.AdamW(
             self.parameters(),
@@ -141,18 +143,14 @@ class LitCoMER(pl.LightningModule):
             weight_decay=1e-4,
         )
 
-        reduce_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode="max",
-            factor=0.5,
-            patience=self.hparams.patience // self.trainer.check_val_every_n_epoch,
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, **self.hparams.cosine_scheduler
         )
+
         scheduler = {
-            "scheduler": reduce_scheduler,
-            "monitor": "val_ExpRate",
-            "interval": "epoch",
-            "frequency": self.trainer.check_val_every_n_epoch,
-            "strict": True,
+            'scheduler': scheduler,
+            'interval': "step",
+            'frequency': 1,
         }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}

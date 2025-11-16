@@ -16,6 +16,7 @@ def train(config: Config):
     model_module = LitCoMER(
         **dict(config.model)
     )
+    LitCoMER.load_from_checkpoint()
     data_module = CROHMEDatamodule(
         **dict(config.data),
     )
