@@ -37,6 +37,7 @@ class LitCoMER(pl.LightningModule):
             # training
             learning_rate: float,
             patience: int,
+            cosine_scheduler: dict,
     ):
         super().__init__()
         self.save_hyperparameters()
