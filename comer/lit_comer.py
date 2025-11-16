@@ -84,7 +84,7 @@ class LitCoMER(pl.LightningModule):
         out_hat = self(batch.imgs, batch.mask, tgt)
 
         loss = ce_loss(out_hat, out)
-        self.log("train_loss", loss, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
 
         return loss
 
@@ -98,7 +98,7 @@ class LitCoMER(pl.LightningModule):
         self.log(
             "val_loss",
             loss,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             sync_dist=True,
