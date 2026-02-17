@@ -30,7 +30,8 @@ class CROHMEDataset(Dataset):
     def __getitem__(self, idx):
         fname, img, caption = self.ds[idx]
 
-        img = [self.transform(im) for im in img]
+        # img = [self.transform(im) for im in img]
+        img = self.transform(img)
 
         return fname, img, caption
 

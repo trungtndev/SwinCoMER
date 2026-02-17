@@ -123,11 +123,15 @@ class Batch:
 
 
 def collate_fn(batch):
-    assert len(batch) == 1
-    batch = batch[0]
-    fnames = batch[0]
-    images_x = batch[1]
-    seqs_y = [vocab.words2indices(x) for x in batch[2]]
+    # assert len(batch) == 1
+    # batch = batch[0]
+    # fnames = batch[0]
+    # images_x = batch[1]
+    # seqs_y = [vocab.words2indices(x) for x in batch[2]]
+
+    fnames = [b[0] for b in batch]
+    images_x = [b[1] for b in batch]
+    seqs_y = [vocab.words2indices(b[2]) for b in batch]
 
     heights_x = [s.size(1) for s in images_x]
     widths_x = [s.size(2) for s in images_x]
@@ -147,8 +151,9 @@ def collate_fn(batch):
 
 
 def build_dataset(archive, folder: str, batch_size: int):
-    data = extract_data(archive, folder)
-    return data_iterator(data, batch_size)
+    # data = extract_data(archive, folder)
+    # return data_iterator(data, batch_size)
+    return extract_data(archive, folder)
 
 
 class CROHMEDatamodule(pl.LightningDataModule):
@@ -195,6 +200,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
+            batch_size=self.train_batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
@@ -203,6 +209,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
+            batch_size=self.eval_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
@@ -211,6 +218,7 @@ class CROHMEDatamodule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
+            batch_size=self.eval_batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=collate_fn,

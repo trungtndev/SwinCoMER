@@ -130,6 +130,9 @@ class LitCoMER(pl.LightningModule):
     ) -> List[Hypothesis]:
         return self.comer_model.beam_search(img, mask, **self.hparams)
 
+    def lr_scheduler_step(self, scheduler, optimizer_idx):
+        scheduler.step_update(self.global_step)
+
     def configure_optimizers(self):
         optimizer = optim.SGD(
             self.parameters(),

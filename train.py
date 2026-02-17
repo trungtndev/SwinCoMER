@@ -1,52 +1,34 @@
 import argparse
 import os
-import wandb
+import torch
 from pytorch_lightning.loggers import WandbLogger as Logger
 from comer.datamodule import CROHMEDatamodule
 from comer.lit_comer import LitCoMER
 from sconf import Config
 import pytorch_lightning as pl
-from pytorch_lightning.plugins.training_type.ddp import DDPPlugin
+from pytorch_lightning.strategies import DDPStrategy
 
+
+torch.set_float32_matmul_precision('high')
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+# torch.cuda.set_per_process_memory_fraction(0.6, device=0)
 
 def train(config: Config):
     pl.seed_everything(config.seed_everything, workers=True)
-    model_module = LitCoMER(
-        **dict(config.model)
-    )
-    data_module = CROHMEDatamodule(
-        **dict(config.data),
-    )
-    # logger = Logger(name=config.wandb.name,
-    #                 project=config.wandb.project,
-    #                 log_model=config.wandb.log_model,
-    #                 config=dict(config),
-    #                 )
-    # logger.watch(model_module,
-    #              log="all",
-    #              log_freq=50
-    #              )
+    model_module = LitCoMER(**config.model)
+    data_module = CROHMEDatamodule(**config.data)
 
-    lr_callback = pl.callbacks.LearningRateMonitor(
-        **dict(config.trainer.callbacks[0].init_args),
-    )
+    logger = Logger(**config.wandb, config=dict(config))
+    logger.watch(model_module, log="all", log_freq=500)
 
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        **dict(config.trainer.callbacks[1].init_args),
-    )
+    lr_callback = pl.callbacks.LearningRateMonitor(**config.callbacks[0].init_args)
+
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(**config.callbacks[1].init_args)
 
     trainer = pl.Trainer(
-        val_check_interval=1.0,
-        num_sanity_val_steps=0,
-        limit_val_batches=0.05,
-
-        gpus=config.trainer.gpus,
-        accelerator=config.trainer.accelerator,
-        check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
-        max_epochs=config.trainer.max_epochs,
-        deterministic=config.trainer.deterministic,
-
-        plugins=DDPPlugin(find_unused_parameters=False),
+        **config.trainer,
+        strategy=DDPStrategy(find_unused_parameters=False),
         # logger=logger,
         callbacks=[lr_callback, checkpoint_callback],
     )
