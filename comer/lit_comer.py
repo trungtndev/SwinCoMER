@@ -4,6 +4,9 @@ from typing import List
 import pytorch_lightning as pl
 import torch.optim as optim
 from torch import FloatTensor, LongTensor
+from timm.scheduler import CosineLRScheduler
+from timm.scheduler.scheduler import Scheduler
+
 
 from comer.datamodule import Batch, vocab
 from comer.model.comer import CoMER
@@ -130,8 +133,11 @@ class LitCoMER(pl.LightningModule):
     ) -> List[Hypothesis]:
         return self.comer_model.beam_search(img, mask, **self.hparams)
 
-    def lr_scheduler_step(self, scheduler, optimizer_idx):
-        scheduler.step_update(self.global_step)
+    def lr_scheduler_step(self, scheduler, metric):
+        if isinstance(scheduler, CosineLRScheduler):
+            scheduler.step_update(self.global_step)
+        elif isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(metric)
 
     def configure_optimizers(self):
         optimizer = optim.SGD(
