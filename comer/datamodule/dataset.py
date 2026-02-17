@@ -1,5 +1,6 @@
 import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
+import numpy as np
 
 from .transforms import ScaleAugmentation, ScaleToLimitRange
 
@@ -31,7 +32,7 @@ class CROHMEDataset(Dataset):
         fname, img, caption = self.ds[idx]
 
         # img = [self.transform(im) for im in img]
-        img = self.transform(img)
+        img = self.transform(np.array(img))
 
         return fname, img, caption
 
