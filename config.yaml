@@ -5,6 +5,7 @@ trainer:
   check_val_every_n_epoch: 2
   max_epochs: 300
   deterministic: true
+  num_sanity_val_steps: 0
 
 callbacks:
   - class_path: pytorch_lightning.callbacks.LearningRateMonitor
@@ -18,7 +19,7 @@ callbacks:
       filename: '{epoch}-{step}-{val_ExpRate:.4f}'
 
 wandb:
- name: "Decoder 6"
+ name:
  project: "HMER"
  log_model: "all"
 
@@ -43,7 +44,7 @@ model:
   temperature: 1.0
   # training
   learning_rate: 0.08
-  patience: 20
+  patience: 4
 data:
   zipfile_path: data.zip
   test_year: "2014"

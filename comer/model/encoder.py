@@ -10,10 +10,53 @@ from torch import FloatTensor, LongTensor
 
 from .pos_enc import ImgPosEnc
 
+class MultiHeadAttnBlock(nn.Module):
+    def __init__(self, in_channels, num_heads, use_bias=True, dropout=0.2, attn_dropout=0.2):
+        super().__init__()
+        assert in_channels % num_heads == 0, \
+            "in_channels must be divisible by num_heads"
+
+        self.in_channels = in_channels
+        self.num_heads = num_heads
+        self.head_dim = in_channels // num_heads
+
+        self.norm = nn.GroupNorm(4, in_channels)
+
+        self.qkv = nn.Conv2d(in_channels, in_channels * 3, kernel_size=1, stride=1, padding=0, bias=use_bias)
+        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0, bias=use_bias)
+
+        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.proj_dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask=None):
+        b, c, h, w = x.shape
+
+        h_ = self.norm(x)
+        qkv = self.qkv(h_)
+        q, k, v = torch.chunk(qkv, 3, dim=1)
+
+        # (b, c, h, w) → (b, num_heads, hw, head_dim)
+        q = q.reshape(b, self.num_heads, self.head_dim, h * w).transpose(2, 3)
+        k = k.reshape(b, self.num_heads, self.head_dim, h * w).transpose(2, 3)
+        v = v.reshape(b, self.num_heads, self.head_dim, h * w).transpose(2, 3)
+
+        attn_mask = None
+        if mask is not None:
+            attn_mask = mask.view(b, 1, 1, h * w)
+
+        h_ = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
+        h_ = h_.transpose(2, 3).reshape(b, c, h, w)
+        h_ = self.attn_dropout(h_)
+
+        h_ = self.proj_out(h_)
+        h_ = self.proj_dropout(h_)
+
+        return x + h_
+
 
 # DenseNet-B
 class _Bottleneck(nn.Module):
-    def __init__(self, n_channels: int, growth_rate: int, use_dropout: bool):
+    def __init__(self, n_channels: int, growth_rate: int, use_dropout: bool, use_attn: bool = False):
         super(_Bottleneck, self).__init__()
         interChannels = 4 * growth_rate
         self.bn1 = nn.BatchNorm2d(interChannels)
@@ -24,21 +67,29 @@ class _Bottleneck(nn.Module):
         )
         self.use_dropout = use_dropout
         self.dropout = nn.Dropout(p=0.2)
+        self.use_attn = use_attn
+        if use_attn:
+            self.self_attn = MultiHeadAttnBlock(growth_rate, num_heads=4)
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         out = F.relu(self.bn1(self.conv1(x)), inplace=True)
         if self.use_dropout:
             out = self.dropout(out)
         out = F.relu(self.bn2(self.conv2(out)), inplace=True)
+
+        if self.use_attn:
+            out = self.self_attn(out, mask)
+
         if self.use_dropout:
             out = self.dropout(out)
+
         out = torch.cat((x, out), 1)
         return out
 
 
 # single layer
 class _SingleLayer(nn.Module):
-    def __init__(self, n_channels: int, growth_rate: int, use_dropout: bool):
+    def __init__(self, n_channels: int, growth_rate: int, use_dropout: bool, use_attn: bool = False):
         super(_SingleLayer, self).__init__()
         self.bn1 = nn.BatchNorm2d(n_channels)
         self.conv1 = nn.Conv2d(
@@ -47,10 +98,15 @@ class _SingleLayer(nn.Module):
         self.use_dropout = use_dropout
         self.dropout = nn.Dropout(p=0.2)
 
-    def forward(self, x):
+        self.use_attn = use_attn
+        if use_attn:
+            self.self_attn = MultiHeadAttnBlock(growth_rate, num_heads=4)
+    def forward(self, x, mask=None):
         out = self.conv1(F.relu(x, inplace=True))
         if self.use_dropout:
             out = self.dropout(out)
+        if self.use_attn:
+            out = self.self_attn(out, mask)
         out = torch.cat((x, out), 1)
         return out
 
