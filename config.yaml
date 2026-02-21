@@ -1,22 +1,28 @@
-seed_everything: 7
+seed_everything: 42
 trainer:
-  checkpoint_callback: true
-  callbacks:
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
-      init_args:
-        logging_interval: epoch
-    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
-      init_args:
-        save_top_k: 1
-        monitor: val_ExpRate
-        mode: max
-        filename: '{epoch}-{step}-{val_ExpRate:.4f}'
-  # gpus: 1
-  gpus: 1
-  accelerator: ddp
+  enable_checkpointing: true
+  accelerator: gpu
   check_val_every_n_epoch: 2
-  max_epochs: 300
+  max_epochs: 150
   deterministic: true
+  num_sanity_val_steps: 0
+
+callbacks:
+  - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+    init_args:
+      logging_interval: epoch
+  - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+    init_args:
+      save_top_k: 1
+      monitor: val_ExpRate
+      mode: max
+      filename: '{epoch}-{step}-{val_ExpRate:.4f}'
+
+wandb:
+ name: comerv1 seed 42
+ project: "HMER"
+ log_model: "all"
+
 model:
   d_model: 256
   # encoder
@@ -38,11 +44,11 @@ model:
   temperature: 1.0
   # training
   learning_rate: 0.08
-  patience: 20
+  patience: 8
 data:
   zipfile_path: data.zip
   test_year: "2014"
-  train_batch_size: 2
-  eval_batch_size: 2
-  num_workers: 5
+  train_batch_size: 8
+  eval_batch_size: 8
+  num_workers: 12
   scale_aug: true
