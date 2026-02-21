@@ -8,42 +8,45 @@ from torch import Tensor
 from torch.nn.init import constant_, xavier_normal_, xavier_uniform_
 
 from .arm import AttentionRefinementModule
-def compute_rope_params(head_dim, theta_base=10_000, context_length=2048, dtype=torch.float32):
-    assert head_dim % 2 == 0, "Embedding dimension must be even"
 
-    # Compute the inverse frequencies
-    inv_freq = 1.0 / (theta_base ** (torch.arange(0, head_dim, 2, dtype=dtype)[: (head_dim // 2)].float() / head_dim))
+def precompute_freqs_cis(
+    dim: int,
+    end: int,
+    theta: float,
+):
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device, dtype=torch.float32)
+    freqs = torch.outer(t, freqs)
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
 
-    # Generate position indices
-    positions = torch.arange(context_length, dtype=dtype)
 
-    # Compute the angles
-    angles = positions.unsqueeze(1) * inv_freq.unsqueeze(0)  # Shape: (context_length, head_dim // 2)
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+    ndim = x.ndim
+    assert 0 <= 1 < ndim
+    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    return freqs_cis.view(*shape)
 
-    # Expand angles to match the head_dim
-    angles = torch.cat([angles, angles], dim=1)  # Shape: (context_length, head_dim)
 
-    # Precompute sine and cosine
-    cos = torch.cos(angles)
-    sin = torch.sin(angles)
+def apply_rotary_emb(
+        xq: torch.Tensor,
+        xk: torch.Tensor,
+        freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # xq, xk shape: (batch_size, seq_len, num_heads, head_dim)
+    freqs_cis = freqs_cis.to(xq.device)
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
 
-    return cos, sin
+    # Broadcast tách biệt cho Q và K (phòng trường hợp seq_len của Q và K khác nhau)
+    freqs_cis_q = reshape_for_broadcast(freqs_cis[:xq.shape[1]], xq_)
+    freqs_cis_k = reshape_for_broadcast(freqs_cis[:xk.shape[1]], xk_)
 
-def apply_rope(x, cos, sin):
-    # x: (batch_size, num_heads, seq_len, head_dim)
-    batch_size, num_heads, seq_len, head_dim = x.shape
-    assert head_dim % 2 == 0, "Head dimension must be even"
+    xq_out = torch.view_as_real(xq_ * freqs_cis_q).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis_k).flatten(3)
 
-    x1 = x[..., : head_dim // 2]
-    x2 = x[..., head_dim // 2 :]
-
-    cos = cos[:seq_len, :].unsqueeze(0).unsqueeze(0)
-    sin = sin[:seq_len, :].unsqueeze(0).unsqueeze(0)
-
-    rotated = torch.cat((-x2, x1), dim=-1)
-    x_rotated = (x * cos) + (rotated * sin)
-
-    return x_rotated.to(dtype=x.dtype)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
 
 class MultiheadAttention(nn.Module):
     bias_k: Optional[torch.Tensor]
@@ -128,6 +131,7 @@ class MultiheadAttention(nn.Module):
         query: Tensor,
         key: Tensor,
         value: Tensor,
+        freqs_cis: Optional[Tensor] = None,
         arm: Optional[AttentionRefinementModule] = None,
         key_padding_mask: Optional[Tensor] = None,
         need_weights: bool = True,
@@ -153,6 +157,7 @@ class MultiheadAttention(nn.Module):
                 key_padding_mask=key_padding_mask,
                 need_weights=need_weights,
                 attn_mask=attn_mask,
+                freqs_cis=freqs_cis,  # <--- THÊM DÒNG NÀY
                 use_separate_proj_weight=True,
                 q_proj_weight=self.q_proj_weight,
                 k_proj_weight=self.k_proj_weight,
@@ -175,6 +180,7 @@ class MultiheadAttention(nn.Module):
                 self.out_proj.weight,
                 self.out_proj.bias,
                 training=self.training,
+                freqs_cis=freqs_cis,  # <--- THÊM DÒNG NÀY
                 key_padding_mask=key_padding_mask,
                 need_weights=need_weights,
                 attn_mask=attn_mask,
@@ -206,6 +212,7 @@ def multi_head_attention_forward(
     v_proj_weight: Optional[Tensor] = None,
     static_k: Optional[Tensor] = None,
     static_v: Optional[Tensor] = None,
+    freqs_cis: Optional[Tensor] = None, # <--- THÊM DÒNG NÀY
 ) -> Tuple[Tensor, Optional[Tensor]]:
     tgt_len, bsz, embed_dim = query.size()
     assert embed_dim == embed_dim_to_check
@@ -351,12 +358,35 @@ def multi_head_attention_forward(
     else:
         assert bias_k is None
         assert bias_v is None
+    # =======================
+    # q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
+    # if k is not None:
+    #     k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+    # if v is not None:
+    #     v = v.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+    if freqs_cis is not None and k is not None:
+        print("use freqs_cis")
+        # 1. Định dạng lại Q và K về shape: (batch_size, seq_len, num_heads, head_dim)
+        src_len = key.size(0)
+        q_rope = q.contiguous().view(tgt_len, bsz, num_heads, head_dim).transpose(0, 1)
+        k_rope = k.contiguous().view(src_len, bsz, num_heads, head_dim).transpose(0, 1)
 
-    q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
-    if k is not None:
-        k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+        # 2. Xoay góc RoPE
+        q_rope, k_rope = apply_rotary_emb(q_rope, k_rope, freqs_cis)
+
+        # 3. Định dạng ngược lại thành (bsz * num_heads, seq_len, head_dim) cho phép toán bmm bên dưới
+        q = q_rope.transpose(1, 2).contiguous().view(bsz * num_heads, tgt_len, head_dim)
+        k = k_rope.transpose(1, 2).contiguous().view(bsz * num_heads, src_len, head_dim)
+    else:
+        # Giữ nguyên logic cũ nếu không truyền RoPE
+        q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
+        if k is not None:
+            k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+
+        # Value (V) không bao giờ bị áp dụng RoPE
     if v is not None:
         v = v.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+    # ==================================
 
     if static_k is not None:
         assert static_k.size(0) == bsz * num_heads

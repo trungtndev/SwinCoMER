@@ -7,59 +7,11 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from .arm import AttentionRefinementModule
-from .attention import MultiheadAttention
+from .attention import MultiheadAttention, precompute_freqs_cis
 
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
-class TransformerDecoder(nn.Module):
-    def __init__(
-        self,
-        decoder_layer,
-        num_layers: int,
-        arm: Optional[AttentionRefinementModule],
-        norm=None,
-    ):
-        super(TransformerDecoder, self).__init__()
-        self.layers = _get_clones(decoder_layer, num_layers)
-        self.num_layers = num_layers
-        self.norm = norm
-
-        self.arm = arm
-
-    def forward(
-        self,
-        tgt: Tensor,
-        memory: Tensor,
-        height: int,
-        tgt_mask: Optional[Tensor] = None,
-        memory_mask: Optional[Tensor] = None,
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        memory_key_padding_mask: Optional[Tensor] = None,
-    ) -> Tensor:
-        output = tgt
-
-        arm = None
-        for i, mod in enumerate(self.layers):
-            output, attn = mod(
-                output,
-                memory,
-                arm,
-                tgt_mask=tgt_mask,
-                memory_mask=memory_mask,
-                tgt_key_padding_mask=tgt_key_padding_mask,
-                memory_key_padding_mask=memory_key_padding_mask,
-            )
-            if i != len(self.layers) - 1 and self.arm is not None:
-                arm = partial(self.arm, attn, memory_key_padding_mask, height)
-
-        if self.norm is not None:
-            output = self.norm(output)
-
-        return output
-
 
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1):
@@ -91,6 +43,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt: Tensor,
         memory: Tensor,
         arm: Optional[AttentionRefinementModule],
+        freqs_cis: Tensor,
         tgt_mask: Optional[Tensor] = None,
         memory_mask: Optional[Tensor] = None,
         tgt_key_padding_mask: Optional[Tensor] = None,
@@ -109,8 +62,9 @@ class TransformerDecoderLayer(nn.Module):
         Shape:
             see the docs in Transformer class.
         """
+        # print("freqs_cis", freqs_cis)
         tgt2 = self.self_attn(
-            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
+            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
         )[0]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
@@ -128,3 +82,53 @@ class TransformerDecoderLayer(nn.Module):
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
         return tgt, attn
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(
+            self,
+            decoder_layer: TransformerDecoderLayer,
+            num_layers: int,
+            arm: Optional[AttentionRefinementModule],
+            norm=None,
+    ):
+        super(TransformerDecoder, self).__init__()
+        self.layers = nn.ModuleList([copy.deepcopy(decoder_layer) for _ in range(num_layers)])
+
+        self.num_layers = num_layers
+        self.norm = norm
+
+        self.arm = arm
+        self.freqs_cis = precompute_freqs_cis(256 // 8, 1024, 10000.0)
+
+    def forward(
+            self,
+            tgt: Tensor,
+            memory: Tensor,
+            height: int,
+            tgt_mask: Optional[Tensor] = None,
+            memory_mask: Optional[Tensor] = None,
+            tgt_key_padding_mask: Optional[Tensor] = None,
+            memory_key_padding_mask: Optional[Tensor] = None,
+    ) -> Tensor:
+        output = tgt
+
+        arm = None
+        for i, mod in enumerate(self.layers):
+            output, attn = mod(
+                output,
+                memory,
+                arm,
+                freqs_cis=self.freqs_cis,
+                tgt_mask=tgt_mask,
+                memory_mask=memory_mask,
+                tgt_key_padding_mask=tgt_key_padding_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
+            if i != len(self.layers) - 1 and self.arm is not None:
+                arm = partial(self.arm, attn, memory_key_padding_mask, height)
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        return output
