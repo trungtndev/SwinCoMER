@@ -108,8 +108,8 @@ class Decoder(DecodeModel):
 
         tgt = self.word_embed(tgt)  # [b, l, d]
         tgt = self.word_norm(tgt)
-        tgt = self.pos_enc(tgt)  # [b, l, d]
-        tgt = self.norm(tgt)
+        # tgt = self.pos_enc(tgt)  # [b, l, d]
+        # tgt = self.norm(tgt)
 
         h = src.shape[1]
         src = rearrange(src, "b h w d -> (h w) b d")

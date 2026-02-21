@@ -99,7 +99,9 @@ class TransformerDecoder(nn.Module):
         self.norm = norm
 
         self.arm = arm
-        self.freqs_cis = precompute_freqs_cis(256 // 8, 1024, 10000.0)
+
+        freqs_cis = precompute_freqs_cis(dim=256 // 8, end=1024, theta=10000.0)
+        self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
     def forward(
             self,

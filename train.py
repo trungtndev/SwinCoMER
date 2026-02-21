@@ -19,8 +19,8 @@ def train(config: Config):
     model_module = LitCoMER(**config.model)
     data_module = CROHMEDatamodule(**config.data)
 
-    logger = Logger(**config.wandb, config=dict(config))
-    logger.watch(model_module, log="all", log_freq=500)
+    # logger = Logger(**config.wandb, config=dict(config))
+    # logger.watch(model_module, log="all", log_freq=500)
 
     lr_callback = pl.callbacks.LearningRateMonitor(**config.callbacks[0].init_args)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(**config.callbacks[1].init_args)
