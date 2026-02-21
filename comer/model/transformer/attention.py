@@ -365,20 +365,15 @@ def multi_head_attention_forward(
     # if v is not None:
     #     v = v.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
     if freqs_cis is not None and k is not None:
-        print("use freqs_cis")
-        # 1. Định dạng lại Q và K về shape: (batch_size, seq_len, num_heads, head_dim)
         src_len = key.size(0)
         q_rope = q.contiguous().view(tgt_len, bsz, num_heads, head_dim).transpose(0, 1)
         k_rope = k.contiguous().view(src_len, bsz, num_heads, head_dim).transpose(0, 1)
 
-        # 2. Xoay góc RoPE
         q_rope, k_rope = apply_rotary_emb(q_rope, k_rope, freqs_cis)
 
-        # 3. Định dạng ngược lại thành (bsz * num_heads, seq_len, head_dim) cho phép toán bmm bên dưới
         q = q_rope.transpose(1, 2).contiguous().view(bsz * num_heads, tgt_len, head_dim)
         k = k_rope.transpose(1, 2).contiguous().view(bsz * num_heads, src_len, head_dim)
     else:
-        # Giữ nguyên logic cũ nếu không truyền RoPE
         q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
         if k is not None:
             k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
