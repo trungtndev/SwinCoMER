@@ -39,7 +39,7 @@ def train(config: Config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--config", type=str, required=False, default="./config.yaml")
     args = parser.parse_args()
     config = Config(args.config)
     train(config)
