@@ -44,15 +44,15 @@ class TransformerDecoderLayer(nn.Module):
         super(TransformerDecoderLayer, self).__setstate__(state)
 
     def forward(
-        self,
-        tgt: Tensor,
-        memory: Tensor,
-        arm: Optional[AttentionRefinementModule],
-        freqs_cis: Tensor,
-        tgt_mask: Optional[Tensor] = None,
-        memory_mask: Optional[Tensor] = None,
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        memory_key_padding_mask: Optional[Tensor] = None,
+            self,
+            tgt: Tensor,
+            memory: Tensor,
+            arm: Optional[AttentionRefinementModule],
+            freqs_cis: Tensor,
+            tgt_mask: Optional[Tensor] = None,
+            memory_mask: Optional[Tensor] = None,
+            tgt_key_padding_mask: Optional[Tensor] = None,
+            memory_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
         r"""Pass the inputs (and mask) through the decoder layer.
 
@@ -122,14 +122,14 @@ class TransformerDecoder(nn.Module):
             memory_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
         output = tgt
-
+        current_freqs_cis = self.freqs_cis[:tgt.size(0)]
         arm = None
         for i, mod in enumerate(self.layers):
             output, attn = mod(
                 output,
                 memory,
                 arm,
-                freqs_cis=self.freqs_cis,
+                freqs_cis=current_freqs_cis,
                 tgt_mask=tgt_mask,
                 memory_mask=memory_mask,
                 tgt_key_padding_mask=tgt_key_padding_mask,
@@ -142,6 +142,7 @@ class TransformerDecoder(nn.Module):
             output = self.norm(output)
 
         return output
+
 
 class Decoder(DecodeModel):
     def __init__(
@@ -165,10 +166,6 @@ class Decoder(DecodeModel):
         # self.pos_enc = WordPosEnc(d_model=d_model)
         # self.norm = nn.LayerNorm(d_model)
 
-        arm = None
-        if cross_coverage or self_coverage:
-            arm = AttentionRefinementModule(nhead, dc, cross_coverage, self_coverage)
-
         self.model = TransformerDecoder(
             TransformerDecoderLayer(
                 d_model=d_model,
@@ -176,7 +173,8 @@ class Decoder(DecodeModel):
                 dim_feedforward=dim_feedforward,
                 dropout=dropout),
             num_decoder_layers,
-            arm,
+            AttentionRefinementModule(nhead, dc, cross_coverage, self_coverage)
+            if (cross_coverage or self_coverage) else None,
             head_dim=d_model // nhead,
             end=end,
             theta=theta,
