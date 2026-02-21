@@ -42,7 +42,7 @@ class MultiHeadAttnBlock(nn.Module):
 
         attn_mask = None
         if mask is not None:
-            attn_mask = mask.view(b, 1, 1, h * w)
+            attn_mask = mask.reshape(b, 1, 1, h * w)
 
         h_ = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         h_ = h_.transpose(2, 3).reshape(b, c, h, w)
@@ -59,9 +59,11 @@ class _Bottleneck(nn.Module):
     def __init__(self, n_channels: int, growth_rate: int, use_dropout: bool, use_attn: bool = False):
         super(_Bottleneck, self).__init__()
         interChannels = 4 * growth_rate
-        self.bn1 = nn.BatchNorm2d(interChannels)
+        # self.bn1 = nn.BatchNorm2d(interChannels) # Note: old
+        self.bn1 = nn.BatchNorm2d(n_channels)
         self.conv1 = nn.Conv2d(n_channels, interChannels, kernel_size=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(growth_rate)
+        # self.bn2 = nn.BatchNorm2d(growth_rate) # Note: old
+        self.bn2 = nn.BatchNorm2d(interChannels)
         self.conv2 = nn.Conv2d(
             interChannels, growth_rate, kernel_size=3, padding=1, bias=False
         )
@@ -72,10 +74,13 @@ class _Bottleneck(nn.Module):
             self.self_attn = MultiHeadAttnBlock(growth_rate, num_heads=4)
 
     def forward(self, x, mask=None):
-        out = F.relu(self.bn1(self.conv1(x)), inplace=True)
+        # out = F.relu(self.bn1(self.conv1(x)), inplace=True) # Note: old
+        out = self.conv1(F.relu(self.bn1(x), inplace=True))
+
         if self.use_dropout:
             out = self.dropout(out)
-        out = F.relu(self.bn2(self.conv2(out)), inplace=True)
+        # out = F.relu(self.bn2(self.conv2(out)), inplace=True) # Note: old
+        out = self.conv2(F.relu(self.bn2(out), inplace=True))
 
         if self.use_attn:
             out = self.self_attn(out, mask)
@@ -115,13 +120,15 @@ class _SingleLayer(nn.Module):
 class _Transition(nn.Module):
     def __init__(self, n_channels: int, n_out_channels: int, use_dropout: bool):
         super(_Transition, self).__init__()
-        self.bn1 = nn.BatchNorm2d(n_out_channels)
+        # self.bn1 = nn.BatchNorm2d(n_out_channels) # Old
+        self.bn1 = nn.BatchNorm2d(n_channels)
         self.conv1 = nn.Conv2d(n_channels, n_out_channels, kernel_size=1, bias=False)
         self.use_dropout = use_dropout
         self.dropout = nn.Dropout(p=0.2)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)), inplace=True)
+        # out = F.relu(self.bn1(self.conv1(x)), inplace=True) # Note: old
+        out = self.conv1(F.relu(self.bn1(x), inplace=True))
         if self.use_dropout:
             out = self.dropout(out)
         out = F.avg_pool2d(out, 2, ceil_mode=True)
@@ -145,7 +152,7 @@ class DenseNet(nn.Module):
         )
         self.norm1 = nn.BatchNorm2d(n_channels)
         self.dense1 = self._make_dense(
-            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout
+            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout, False
         )
         n_channels += n_dense_blocks * growth_rate
         n_out_channels = int(math.floor(n_channels * reduction))
@@ -153,7 +160,7 @@ class DenseNet(nn.Module):
 
         n_channels = n_out_channels
         self.dense2 = self._make_dense(
-            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout
+            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout, False
         )
         n_channels += n_dense_blocks * growth_rate
         n_out_channels = int(math.floor(n_channels * reduction))
@@ -161,22 +168,22 @@ class DenseNet(nn.Module):
 
         n_channels = n_out_channels
         self.dense3 = self._make_dense(
-            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout
+            n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout, False
         )
 
         self.out_channels = n_channels + n_dense_blocks * growth_rate
         self.post_norm = nn.BatchNorm2d(self.out_channels)
 
     @staticmethod
-    def _make_dense(n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout):
+    def _make_dense(n_channels, growth_rate, n_dense_blocks, bottleneck, use_dropout, use_attn):
         layers = []
         for _ in range(int(n_dense_blocks)):
             if bottleneck:
-                layers.append(_Bottleneck(n_channels, growth_rate, use_dropout))
+                layers.append(_Bottleneck(n_channels, growth_rate, use_dropout, use_attn))
             else:
-                layers.append(_SingleLayer(n_channels, growth_rate, use_dropout))
+                layers.append(_SingleLayer(n_channels, growth_rate, use_dropout, use_attn))
             n_channels += growth_rate
-        return nn.Sequential(*layers)
+        return nn.ModuleList(layers)
 
     def forward(self, x, x_mask):
         out = self.conv1(x)
@@ -185,13 +192,16 @@ class DenseNet(nn.Module):
         out = F.relu(out, inplace=True)
         out = F.max_pool2d(out, 2, ceil_mode=True)
         out_mask = out_mask[:, 0::2, 0::2]
-        out = self.dense1(out)
+        for layer in self.dense1:
+            out = layer(out, out_mask)
         out = self.trans1(out)
         out_mask = out_mask[:, 0::2, 0::2]
-        out = self.dense2(out)
+        for layer in self.dense2:
+            out = layer(out, out_mask)
         out = self.trans2(out)
         out_mask = out_mask[:, 0::2, 0::2]
-        out = self.dense3(out)
+        for layer in self.dense3:
+            out = layer(out, out_mask)
         out = self.post_norm(out)
         return out, out_mask
 
@@ -238,10 +248,7 @@ class Encoder(pl.LightningModule):
 
         # flat to 1-D
         return feature, mask
+
 if __name__ == "__main__":
-    model = Encoder(d_model=96)
-    x = torch.randn(2, 1, 224, 224)
-    mask = torch.ones(2, 224, 224).bool()
-    out, mask = model(x, mask)
-    print(out.shape)
-    print(mask.shape)
+    model = DenseNet(growth_rate=32, num_layers=2)
+    print(model)

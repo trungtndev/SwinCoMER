@@ -23,8 +23,9 @@ def train(config: Config):
     logger.watch(model_module, log="all", log_freq=500)
 
     lr_callback = pl.callbacks.LearningRateMonitor(**config.callbacks[0].init_args)
-
     checkpoint_callback = pl.callbacks.ModelCheckpoint(**config.callbacks[1].init_args)
+    # early_stop_callback = pl.callbacks.EarlyStopping(**config.callbacks[0].init_args)
+
 
     trainer = pl.Trainer(
         **config.trainer,
