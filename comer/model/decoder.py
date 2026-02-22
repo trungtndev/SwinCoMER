@@ -72,6 +72,7 @@ class TransformerDecoderLayer(nn.Module):
             tgt_norm, tgt_norm, tgt_norm, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
         )[0]
         tgt = tgt + self.dropout1(tgt2)
+
         tgt_norm = self.norm2(tgt)  # pre-norm
         tgt2, attn = self.multihead_attn(
             tgt_norm,
@@ -82,10 +83,42 @@ class TransformerDecoderLayer(nn.Module):
             key_padding_mask=memory_key_padding_mask,
         )
         tgt = tgt + self.dropout2(tgt2)
+
         tgt_norm = self.norm3(tgt)  # pre-norm
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt_norm))))
         tgt = tgt + self.dropout3(tgt2)
         return tgt, attn
+
+
+    # def forward(
+    #     self,
+    #     tgt: Tensor,
+    #     memory: Tensor,
+    #     arm: Optional[AttentionRefinementModule],
+    #     tgt_mask: Optional[Tensor] = None,
+    #     memory_mask: Optional[Tensor] = None,
+    #     tgt_key_padding_mask: Optional[Tensor] = None,
+    #     memory_key_padding_mask: Optional[Tensor] = None,
+    # ) -> Tensor:
+    #     tgt2 = self.self_attn(
+    #         tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
+    #     )[0]
+    #     tgt = tgt + self.dropout1(tgt2)
+    #     tgt = self.norm1(tgt) # post-norm
+    #     tgt2, attn = self.multihead_attn(
+    #         tgt,
+    #         memory,
+    #         memory,
+    #         arm=arm,
+    #         attn_mask=memory_mask,
+    #         key_padding_mask=memory_key_padding_mask,
+    #     )
+    #     tgt = tgt + self.dropout2(tgt2)
+    #     tgt = self.norm2(tgt) # post-norm
+    #     tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+    #     tgt = tgt + self.dropout3(tgt2)
+    #     tgt = self.norm3(tgt) # post-norm
+    #     return tgt, attn
 
 
 class TransformerDecoder(nn.Module):
@@ -113,8 +146,6 @@ class TransformerDecoder(nn.Module):
             )
             for _ in range(num_layers)
         ])
-
-        self.num_layers = num_layers
         self.norm = nn.LayerNorm(d_model)
         self.arm = arm
 
@@ -170,6 +201,7 @@ class Decoder(DecodeModel):
         super().__init__()
 
         self.word_embed = nn.Embedding(vocab_size, d_model)
+        # self.norm = nn.LayerNorm(d_model)
 
         self.model = TransformerDecoder(
             d_model=d_model,
@@ -177,8 +209,9 @@ class Decoder(DecodeModel):
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             num_layers=num_decoder_layers,
-            arm=AttentionRefinementModule(nhead, dc, cross_coverage, self_coverage) if (
-                        cross_coverage or self_coverage) else None,
+            arm=AttentionRefinementModule(
+                nhead, dc, cross_coverage, self_coverage
+            ) if (cross_coverage or self_coverage) else None,
             end=end,
             theta=theta,
         )
@@ -218,6 +251,7 @@ class Decoder(DecodeModel):
         tgt_pad_mask = tgt == vocab.PAD_IDX
 
         tgt = self.word_embed(tgt)
+        # tgt = self.norm(tgt)
 
         h = src.shape[1]
         src = rearrange(src, "b h w d -> (h w) b d")
@@ -244,6 +278,7 @@ class Decoder(DecodeModel):
         assert len(src) == 1 and len(src_mask) == 1
         word_out = self(src[0], src_mask[0], input_ids)
         return word_out
+
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
