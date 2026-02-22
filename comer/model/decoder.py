@@ -95,13 +95,14 @@ class TransformerDecoderLayer(nn.Module):
     #     tgt: Tensor,
     #     memory: Tensor,
     #     arm: Optional[AttentionRefinementModule],
+    #     freqs_cis: Tensor,
     #     tgt_mask: Optional[Tensor] = None,
     #     memory_mask: Optional[Tensor] = None,
     #     tgt_key_padding_mask: Optional[Tensor] = None,
     #     memory_key_padding_mask: Optional[Tensor] = None,
     # ) -> Tensor:
     #     tgt2 = self.self_attn(
-    #         tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
+    #         tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
     #     )[0]
     #     tgt = tgt + self.dropout1(tgt2)
     #     tgt = self.norm1(tgt) # post-norm
