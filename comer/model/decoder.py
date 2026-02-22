@@ -87,7 +87,6 @@ class TransformerDecoderLayer(nn.Module):
         tgt_norm = self.norm3(tgt)  # pre-norm
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt_norm))))
         tgt = tgt + self.dropout3(tgt2)
-
         return tgt, attn
 
 
