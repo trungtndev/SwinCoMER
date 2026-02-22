@@ -9,10 +9,11 @@ from torch.nn.init import constant_, xavier_normal_, xavier_uniform_
 
 from .arm import AttentionRefinementModule
 
+
 def precompute_freqs_cis(
-    dim: int,
-    end: int,
-    theta: float,
+        dim: int,
+        end: int,
+        theta: float,
 ):
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
     t = torch.arange(end, device=freqs.device, dtype=torch.float32)
@@ -39,20 +40,22 @@ def apply_rotary_emb(
 
     return x_out.type_as(x)
 
+
 class MultiheadAttention(nn.Module):
     bias_k: Optional[torch.Tensor]
     bias_v: Optional[torch.Tensor]
 
     def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        add_bias_kv=False,
-        add_zero_attn=False,
-        kdim=None,
-        vdim=None,
+            self,
+            embed_dim,
+            num_heads,
+            dropout=0.0,
+            bias=True,
+            add_bias_kv=False,
+            add_zero_attn=False,
+            kdim=None,
+            vdim=None,
+            qk_norm=False,
     ):
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
@@ -64,7 +67,7 @@ class MultiheadAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         assert (
-            self.head_dim * num_heads == self.embed_dim
+                self.head_dim * num_heads == self.embed_dim
         ), "embed_dim must be divisible by num_heads"
 
         if self._qkv_same_embed_dim is False:
@@ -92,6 +95,13 @@ class MultiheadAttention(nn.Module):
 
         self.add_zero_attn = add_zero_attn
 
+        self.qk_norm = qk_norm
+        if self.qk_norm:
+            self.q_norm = nn.LayerNorm(self.head_dim)
+            self.k_norm = nn.LayerNorm(self.head_dim)
+        else:
+            self.q_norm = None
+            self.k_norm = None
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -118,15 +128,15 @@ class MultiheadAttention(nn.Module):
         super(MultiheadAttention, self).__setstate__(state)
 
     def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        freqs_cis: Optional[Tensor] = None,
-        arm: Optional[AttentionRefinementModule] = None,
-        key_padding_mask: Optional[Tensor] = None,
-        need_weights: bool = True,
-        attn_mask: Optional[Tensor] = None,
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            freqs_cis: Optional[Tensor] = None,
+            arm: Optional[AttentionRefinementModule] = None,
+            key_padding_mask: Optional[Tensor] = None,
+            need_weights: bool = True,
+            attn_mask: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         if not self._qkv_same_embed_dim:
             return multi_head_attention_forward(
@@ -149,6 +159,8 @@ class MultiheadAttention(nn.Module):
                 need_weights=need_weights,
                 attn_mask=attn_mask,
                 freqs_cis=freqs_cis,  # <--- THÊM DÒNG NÀY
+                q_norm=self.q_norm,  # <--- THÊM DÒNG NÀY
+                k_norm=self.k_norm,  # <--- THÊM DÒNG NÀY
                 use_separate_proj_weight=True,
                 q_proj_weight=self.q_proj_weight,
                 k_proj_weight=self.k_proj_weight,
@@ -172,6 +184,8 @@ class MultiheadAttention(nn.Module):
                 self.out_proj.bias,
                 training=self.training,
                 freqs_cis=freqs_cis,  # <--- THÊM DÒNG NÀY
+                q_norm=self.q_norm,  # <--- THÊM DÒNG NÀY
+                k_norm=self.k_norm,  # <--- THÊM DÒNG NÀY
                 key_padding_mask=key_padding_mask,
                 need_weights=need_weights,
                 attn_mask=attn_mask,
@@ -179,31 +193,33 @@ class MultiheadAttention(nn.Module):
 
 
 def multi_head_attention_forward(
-    query: Tensor,
-    key: Tensor,
-    value: Tensor,
-    arm: Optional[AttentionRefinementModule],
-    embed_dim_to_check: int,
-    num_heads: int,
-    in_proj_weight: Tensor,
-    in_proj_bias: Tensor,
-    bias_k: Optional[Tensor],
-    bias_v: Optional[Tensor],
-    add_zero_attn: bool,
-    dropout_p: float,
-    out_proj_weight: Tensor,
-    out_proj_bias: Tensor,
-    training: bool = True,
-    key_padding_mask: Optional[Tensor] = None,
-    need_weights: bool = True,
-    attn_mask: Optional[Tensor] = None,
-    use_separate_proj_weight: bool = False,
-    q_proj_weight: Optional[Tensor] = None,
-    k_proj_weight: Optional[Tensor] = None,
-    v_proj_weight: Optional[Tensor] = None,
-    static_k: Optional[Tensor] = None,
-    static_v: Optional[Tensor] = None,
-    freqs_cis: Optional[Tensor] = None, # <--- THÊM DÒNG NÀY
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        arm: Optional[AttentionRefinementModule],
+        embed_dim_to_check: int,
+        num_heads: int,
+        in_proj_weight: Tensor,
+        in_proj_bias: Tensor,
+        bias_k: Optional[Tensor],
+        bias_v: Optional[Tensor],
+        add_zero_attn: bool,
+        dropout_p: float,
+        out_proj_weight: Tensor,
+        out_proj_bias: Tensor,
+        training: bool = True,
+        key_padding_mask: Optional[Tensor] = None,
+        need_weights: bool = True,
+        attn_mask: Optional[Tensor] = None,
+        use_separate_proj_weight: bool = False,
+        q_proj_weight: Optional[Tensor] = None,
+        k_proj_weight: Optional[Tensor] = None,
+        v_proj_weight: Optional[Tensor] = None,
+        static_k: Optional[Tensor] = None,
+        static_v: Optional[Tensor] = None,
+        freqs_cis: Optional[Tensor] = None,  # <--- THÊM DÒNG NÀY
+        q_norm: Optional[nn.Module] = None,  # <--- THÊM
+        k_norm: Optional[nn.Module] = None,  # <--- THÊM
 ) -> Tuple[Tensor, Optional[Tensor]]:
     tgt_len, bsz, embed_dim = query.size()
     assert embed_dim == embed_dim_to_check
@@ -216,7 +232,7 @@ def multi_head_attention_forward(
 
     if not use_separate_proj_weight:
         if (query is key or torch.equal(query, key)) and (
-            key is value or torch.equal(key, value)
+                key is value or torch.equal(key, value)
         ):
             # self-attention
             q, k, v = F.linear(query, in_proj_weight, in_proj_bias).chunk(3, dim=-1)
@@ -290,22 +306,37 @@ def multi_head_attention_forward(
         if in_proj_bias is not None:
             q = F.linear(query, q_proj_weight_non_opt, in_proj_bias[0:embed_dim])
             k = F.linear(
-                key, k_proj_weight_non_opt, in_proj_bias[embed_dim : (embed_dim * 2)]
+                key, k_proj_weight_non_opt, in_proj_bias[embed_dim: (embed_dim * 2)]
             )
-            v = F.linear(value, v_proj_weight_non_opt, in_proj_bias[(embed_dim * 2) :])
+            v = F.linear(value, v_proj_weight_non_opt, in_proj_bias[(embed_dim * 2):])
         else:
             q = F.linear(query, q_proj_weight_non_opt, in_proj_bias)
             k = F.linear(key, k_proj_weight_non_opt, in_proj_bias)
             v = F.linear(value, v_proj_weight_non_opt, in_proj_bias)
+
+    # =========================== CHÈN QK-NORM VÀO ĐÂY (TRƯỚC KHI SCALING VÀ ROPE) ===============================
+    if q_norm is not None and k_norm is not None:
+        # q shape hiện tại: (tgt_len, bsz, embed_dim)
+        # Ép về (tgt_len, bsz, num_heads, head_dim) để norm từng head
+        q = q.contiguous().view(tgt_len, bsz, num_heads, head_dim)
+        q = q_norm(q)
+        q = q.view(tgt_len, bsz, embed_dim)  # Trả lại shape gốc để tương thích code dưới
+
+        if k is not None:
+            src_len = k.size(0)
+            k = k.contiguous().view(src_len, bsz, num_heads, head_dim)
+            k = k_norm(k)
+            k = k.view(src_len, bsz, embed_dim)
+    # ==========================================================
     q = q * scaling
 
     if attn_mask is not None:
         assert (
-            attn_mask.dtype == torch.float32
-            or attn_mask.dtype == torch.float64
-            or attn_mask.dtype == torch.float16
-            or attn_mask.dtype == torch.uint8
-            or attn_mask.dtype == torch.bool
+                attn_mask.dtype == torch.float32
+                or attn_mask.dtype == torch.float64
+                or attn_mask.dtype == torch.float16
+                or attn_mask.dtype == torch.uint8
+                or attn_mask.dtype == torch.bool
         ), "Only float, byte, and bool types are supported for attn_mask, not {}".format(
             attn_mask.dtype
         )
@@ -362,7 +393,6 @@ def multi_head_attention_forward(
 
         q_rope = apply_rotary_emb(q_rope, freqs_cis)
         k_rope = apply_rotary_emb(k_rope, freqs_cis)
-
 
         q = q_rope.transpose(1, 2).contiguous().view(bsz * num_heads, tgt_len, head_dim)
         k = k_rope.transpose(1, 2).contiguous().view(bsz * num_heads, src_len, head_dim)
