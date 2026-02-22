@@ -30,23 +30,14 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
 
 
 def apply_rotary_emb(
-        xq: torch.Tensor,
-        xk: torch.Tensor,
+        x: torch.Tensor,
         freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    # xq, xk shape: (batch_size, seq_len, num_heads, head_dim)
-    freqs_cis = freqs_cis.to(xq.device)
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+) -> torch.Tensor:
+    x_ = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
+    freqs_cis_x = reshape_for_broadcast(freqs_cis[:x.shape[1]], x_)
+    x_out = torch.view_as_real(x_ * freqs_cis_x).flatten(3)
 
-    # Broadcast tách biệt cho Q và K (phòng trường hợp seq_len của Q và K khác nhau)
-    freqs_cis_q = reshape_for_broadcast(freqs_cis[:xq.shape[1]], xq_)
-    freqs_cis_k = reshape_for_broadcast(freqs_cis[:xk.shape[1]], xk_)
-
-    xq_out = torch.view_as_real(xq_ * freqs_cis_q).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis_k).flatten(3)
-
-    return xq_out.type_as(xq), xk_out.type_as(xk)
+    return x_out.type_as(x)
 
 class MultiheadAttention(nn.Module):
     bias_k: Optional[torch.Tensor]
@@ -369,7 +360,9 @@ def multi_head_attention_forward(
         q_rope = q.contiguous().view(tgt_len, bsz, num_heads, head_dim).transpose(0, 1)
         k_rope = k.contiguous().view(src_len, bsz, num_heads, head_dim).transpose(0, 1)
 
-        q_rope, k_rope = apply_rotary_emb(q_rope, k_rope, freqs_cis)
+        q_rope = apply_rotary_emb(q_rope, freqs_cis)
+        k_rope = apply_rotary_emb(k_rope, freqs_cis)
+
 
         q = q_rope.transpose(1, 2).contiguous().view(bsz * num_heads, tgt_len, head_dim)
         k = k_rope.transpose(1, 2).contiguous().view(bsz * num_heads, src_len, head_dim)
