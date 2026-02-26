@@ -81,8 +81,8 @@ class LitCoMER(pl.LightningModule):
 
     def training_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
-        out = self(batch.imgs, batch.mask, tgt)
-        out_hat, l_aux = out[0], out[1]
+        output = self(batch.imgs, batch.mask, tgt)
+        out_hat, l_aux = output[0], output[1]
 
         loss = ce_loss(out_hat, out)
         l_aux = l_aux * self.hparams.l_aux_weight
@@ -95,8 +95,8 @@ class LitCoMER(pl.LightningModule):
 
     def validation_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
-        out = self(batch.imgs, batch.mask, tgt)
-        out_hat, l_aux = out[0], out[1]
+        output = self(batch.imgs, batch.mask, tgt)
+        out_hat, l_aux = output[0], output[1]
 
         loss = ce_loss(out_hat, out)
         l_aux = l_aux * self.hparams.l_aux_weight

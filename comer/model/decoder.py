@@ -54,15 +54,22 @@ class MoE(nn.Module):
         self.moe = MOELayer(
             Top2Gate(model_dim=d_model, num_experts=num_experts),
             nn.ModuleList([
-                copy.deepcopy(
+                # copy.deepcopy(
                     FFN(d_model, dim_feedforward, dropout)
-                )
+                # )
                 for _ in range(num_experts)
             ])
         )
 
     def forward(self, x):
-        return self.moe(x), self.moe.l_aux
+        # print("MoE input shape:", x.shape)
+        # l_seq, b_size, d_model = x.shape
+        # x = rearrange(x, "l b d -> (b l) 1 d")
+        x = rearrange(x, "l b d -> b l d")
+        x = self.moe(x)
+        x = rearrange(x, "b l d -> l b d")
+        # x = rearrange(x, "(b l) 1 d -> l b d", b=b_size, l=l_seq)
+        return x, self.moe.l_aux
 
 
 class TransformerDecoderLayer(nn.Module):
@@ -176,13 +183,13 @@ class TransformerDecoder(nn.Module):
         super(TransformerDecoder, self).__init__()
         self.num_layers = num_layers
         self.layers = nn.ModuleList([
-            copy.deepcopy(
+            # copy.deepcopy(
                 TransformerDecoderLayer(
                     d_model=d_model,
                     nhead=nhead,
                     dim_feedforward=dim_feedforward,
                     dropout=dropout
-                ),
+                # ),
             )
             for _ in range(num_layers)
         ])
