@@ -11,6 +11,7 @@ from comer.model.pos_enc import WordPosEnc
 import torch.nn.functional as F
 from torch import Tensor
 from functools import partial
+from fairscale.nn.moe import Top2Gate, MOELayer
 
 from comer.model.transformer.attention import MultiheadAttention, precompute_freqs_cis
 from comer.model.transformer.arm import AttentionRefinementModule
@@ -18,15 +19,57 @@ from comer.model.transformer.arm import AttentionRefinementModule
 from comer.utils.generation_utils import DecodeModel
 
 
+class SwiGLU(nn.Module):
+    def __init__(self, d_model, dim_feedforward, dropout):
+        super(SwiGLU, self).__init__()
+        self.fc1 = nn.Linear(d_model, dim_feedforward)
+        self.fc2 = nn.Linear(d_model, dim_feedforward)
+        self.fc3 = nn.Linear(dim_feedforward, d_model)
+        self.act = nn.SiLU()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x_fc1 = self.fc1(x)
+        x_fc2 = self.fc2(x)
+        x = self.act(x_fc1) * x_fc2
+        x = self.dropout(x)
+        return self.fc3(x)
+
+
+class FFN(nn.Module):
+    def __init__(self, d_model, dim_feedforward, dropout):
+        super(FFN, self).__init__()
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        return self.linear2(self.dropout(self.act(self.linear1(x))))
+
+
+class MoE(nn.Module):
+    def __init__(self, d_model, dim_feedforward, dropout, num_experts):
+        super(MoE, self).__init__()
+        self.moe = MOELayer(
+            Top2Gate(model_dim=d_model, num_experts=num_experts),
+            nn.ModuleList([
+                copy.deepcopy(
+                    FFN(d_model, dim_feedforward, dropout)
+                )
+                for _ in range(num_experts)
+            ])
+        )
+
+    def forward(self, x):
+        return self.moe(x), self.moe.l_aux
+
+
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1):
         super(TransformerDecoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
 
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -36,12 +79,7 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
         self.dropout3 = nn.Dropout(dropout)
 
-        self.activation = nn.ReLU()
-
-    def __setstate__(self, state):
-        if "activation" not in state:
-            state["activation"] = nn.ReLU()
-        super(TransformerDecoderLayer, self).__setstate__(state)
+        self.ffn = MoE(d_model, dim_feedforward, dropout, num_experts=4)
 
     # def forward(
     #         self,
@@ -90,21 +128,21 @@ class TransformerDecoderLayer(nn.Module):
     #     return tgt, attn
 
     def forward(
-        self,
-        tgt: Tensor,
-        memory: Tensor,
-        arm: Optional[AttentionRefinementModule],
-        freqs_cis: Tensor,
-        tgt_mask: Optional[Tensor] = None,
-        memory_mask: Optional[Tensor] = None,
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        memory_key_padding_mask: Optional[Tensor] = None,
+            self,
+            tgt: Tensor,
+            memory: Tensor,
+            arm: Optional[AttentionRefinementModule],
+            freqs_cis: Tensor,
+            tgt_mask: Optional[Tensor] = None,
+            memory_mask: Optional[Tensor] = None,
+            tgt_key_padding_mask: Optional[Tensor] = None,
+            memory_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
         tgt2 = self.self_attn(
             tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
         )[0]
         tgt = tgt + self.dropout1(tgt2)
-        tgt = self.norm1(tgt) # post-norm
+        tgt = self.norm1(tgt)  # post-norm
         tgt2, attn = self.multihead_attn(
             tgt,
             memory,
@@ -114,11 +152,11 @@ class TransformerDecoderLayer(nn.Module):
             key_padding_mask=memory_key_padding_mask,
         )
         tgt = tgt + self.dropout2(tgt2)
-        tgt = self.norm2(tgt) # post-norm
-        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+        tgt = self.norm2(tgt)  # post-norm
+        tgt2, l_aux = self.ffn(tgt)
         tgt = tgt + self.dropout3(tgt2)
-        tgt = self.norm3(tgt) # post-norm
-        return tgt, attn
+        tgt = self.norm3(tgt)  # post-norm
+        return tgt, attn, l_aux
 
 
 class TransformerDecoder(nn.Module):
@@ -168,8 +206,9 @@ class TransformerDecoder(nn.Module):
         # current_freqs_cis = self.freqs_cis[:tgt.size(0)]
         current_freqs_cis = None
         arm = None
+        l_aux = 0.0
         for i, mod in enumerate(self.layers):
-            output, attn = mod(
+            output, attn, cur_l_aux = mod(
                 output,
                 memory,
                 arm,
@@ -181,11 +220,12 @@ class TransformerDecoder(nn.Module):
             )
             if i != len(self.layers) - 1 and self.arm is not None:
                 arm = partial(self.arm, attn, memory_key_padding_mask, height)
+            l_aux += cur_l_aux
 
         if self.norm is not None:
             output = self.norm(output)
 
-        return output
+        return output, l_aux
 
 
 class Decoder(DecodeModel):
@@ -209,7 +249,6 @@ class Decoder(DecodeModel):
 
         self.pos_enc = WordPosEnc(d_model=d_model)
         self.pos_norm = nn.LayerNorm(d_model)
-
 
         self.model = TransformerDecoder(
             d_model=d_model,
@@ -269,7 +308,7 @@ class Decoder(DecodeModel):
         src_mask = rearrange(src_mask, "b h w -> b (h w)")
         tgt = rearrange(tgt, "b l d -> l b d")
 
-        out = self.model(
+        out, l_aux = self.model(
             tgt=tgt,
             memory=src,
             height=h,
@@ -281,13 +320,13 @@ class Decoder(DecodeModel):
         out = rearrange(out, "l b d -> b l d")
         out = self.proj(out)
 
-        return out
+        return out, l_aux
 
     def transform(
             self, src: List[FloatTensor], src_mask: List[LongTensor], input_ids: LongTensor
     ) -> FloatTensor:
         assert len(src) == 1 and len(src_mask) == 1
-        word_out = self(src[0], src_mask[0], input_ids)
+        word_out, _ = self(src[0], src_mask[0], input_ids)
         return word_out
 
 

@@ -38,6 +38,7 @@ class LitCoMER(pl.LightningModule):
         # training
         learning_rate: float,
         patience: int,
+        l_aux_weight: float,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -80,26 +81,30 @@ class LitCoMER(pl.LightningModule):
 
     def training_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
-        out_hat = self(batch.imgs, batch.mask, tgt)
+        out = self(batch.imgs, batch.mask, tgt)
+        out_hat, l_aux = out[0], out[1]
 
         loss = ce_loss(out_hat, out)
+        l_aux = l_aux * self.hparams.l_aux_weight
+        total_loss = loss + l_aux
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("train_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("train_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
 
         return loss
 
     def validation_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
-        out_hat = self(batch.imgs, batch.mask, tgt)
+        out = self(batch.imgs, batch.mask, tgt)
+        out_hat, l_aux = out[0], out[1]
 
         loss = ce_loss(out_hat, out)
-        self.log(
-            "val_loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
+        l_aux = l_aux * self.hparams.l_aux_weight
+        total_loss = loss + l_aux
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("val_total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("val_l_aux", l_aux, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
 

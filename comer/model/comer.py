@@ -65,9 +65,9 @@ class CoMER(pl.LightningModule):
         feature = torch.cat((feature, feature), dim=0)  # [2b, t, d]
         mask = torch.cat((mask, mask), dim=0)
 
-        out = self.decoder(feature, mask, tgt)
+        out, l_aux = self.decoder(feature, mask, tgt)
 
-        return out
+        return out, l_aux
 
     def beam_search(
         self,
