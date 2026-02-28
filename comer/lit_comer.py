@@ -7,7 +7,6 @@ from torch import FloatTensor, LongTensor
 from timm.scheduler import CosineLRScheduler
 from timm.scheduler.scheduler import Scheduler
 
-
 from comer.datamodule import Batch, vocab
 from comer.model.comer import CoMER
 from comer.utils.utils import (ExpRateRecorder, Hypothesis, ce_loss,
@@ -16,31 +15,31 @@ from comer.utils.utils import (ExpRateRecorder, Hypothesis, ce_loss,
 
 class LitCoMER(pl.LightningModule):
     def __init__(
-        self,
-        d_model: int,
-        # encoder
-        growth_rate: int,
-        num_layers: int,
-        # decoder
-        nhead: int,
-        num_decoder_layers: int,
-        dim_feedforward: int,
-        dropout: float,
-        dc: int,
-        use_moe: bool,
-        num_experts: int,
-        cross_coverage: bool,
-        self_coverage: bool,
-        # beam search
-        beam_size: int,
-        max_len: int,
-        alpha: float,
-        early_stopping: bool,
-        temperature: float,
-        # training
-        learning_rate: float,
-        patience: int,
-        l_aux_weight: float,
+            self,
+            d_model: int,
+            # encoder
+            growth_rate: int,
+            num_layers: int,
+            # decoder
+            nhead: int,
+            num_decoder_layers: int,
+            dim_feedforward: int,
+            dropout: float,
+            dc: int,
+            use_moe: bool,
+            num_experts: int,
+            cross_coverage: bool,
+            self_coverage: bool,
+            # beam search
+            beam_size: int,
+            max_len: int,
+            alpha: float,
+            early_stopping: bool,
+            temperature: float,
+            # training
+            learning_rate: float,
+            patience: int,
+            l_aux_weight: float,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -81,7 +80,7 @@ class LitCoMER(pl.LightningModule):
     #         )
 
     def forward(
-        self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
+            self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
     ) -> FloatTensor:
         """run img and bi-tgt
 
@@ -129,13 +128,12 @@ class LitCoMER(pl.LightningModule):
             loss = ce_loss(out_hat, out)
             l_aux = l_aux * self.hparams.l_aux_weight
             total_loss = loss + l_aux
-            self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("val_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("val_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_l_aux", l_aux, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         else:
             loss = ce_loss(out_hat, out)
-            self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-
+            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
 
@@ -165,7 +163,7 @@ class LitCoMER(pl.LightningModule):
                         f.write(content)
 
     def approximate_joint_search(
-        self, img: FloatTensor, mask: LongTensor
+            self, img: FloatTensor, mask: LongTensor
     ) -> List[Hypothesis]:
         return self.comer_model.beam_search(img, mask, **self.hparams)
 

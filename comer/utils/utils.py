@@ -7,6 +7,20 @@ from einops import rearrange
 from torch import LongTensor
 from torchmetrics import Metric
 
+from pytorch_lightning.callbacks import Callback
+
+
+class ConditionalValidation(Callback):
+    def on_validation_start(self, trainer, pl_module):
+        train_loss = trainer.callback_metrics.get("train_loss")
+        if train_loss is not None and train_loss >= 1.0:
+            trainer.limit_val_batches = 0.0
+        else:
+            trainer.limit_val_batches = 1.0
+
+    def on_validation_end(self, trainer, pl_module):
+        if trainer.limit_val_batches == 0.0:
+            pl_module.log("val_ExpRate", 0.0, sync_dist=True)
 
 class Hypothesis:
     seq: List[int]
