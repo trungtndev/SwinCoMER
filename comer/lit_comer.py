@@ -45,7 +45,7 @@ class LitCoMER(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.comer_model = None
+        # self.comer_model = None
         self.comer_model = CoMER(
             d_model=d_model,
             growth_rate=growth_rate,
