@@ -62,16 +62,10 @@ class MOELayer(Base):
         for expert in self.experts:
             for p in experts.parameters():
                 p.expert = True  # type: ignore
-        self.world_size = None
+        self.world_size = dist.get_world_size(self.group)
         self.num_local_experts = len(self.experts)
 
     def forward(self, *input: Tensor, **kwargs: Any) -> Tensor:
-        if self.world_size is None:
-            if dist.is_available() and dist.is_initialized():
-                self.world_size = dist.get_world_size(self.group)
-            else:
-                self.world_size = 1
-
         assert len(input) == 1, "only single input Tensor supported"
         assert len(input[0].shape) == 3, "input Tensor must have dimensions: (s)equence, (t)oken, (m)odel"
         assert input[0].shape[0] % len(self.experts) == 0, "num tokens must be order of number of local experts"
