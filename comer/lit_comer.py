@@ -27,6 +27,7 @@ class LitCoMER(pl.LightningModule):
         dim_feedforward: int,
         dropout: float,
         dc: int,
+        use_moe: bool,
         cross_coverage: bool,
         self_coverage: bool,
         # beam search
@@ -43,20 +44,37 @@ class LitCoMER(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.comer_model = CoMER(
-            d_model=d_model,
-            growth_rate=growth_rate,
-            num_layers=num_layers,
-            nhead=nhead,
-            num_decoder_layers=num_decoder_layers,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            dc=dc,
-            cross_coverage=cross_coverage,
-            self_coverage=self_coverage,
-        )
+        self.comer_model = None
+        # self.comer_model = CoMER(
+        #     d_model=d_model,
+        #     growth_rate=growth_rate,
+        #     num_layers=num_layers,
+        #     nhead=nhead,
+        #     num_decoder_layers=num_decoder_layers,
+        #     dim_feedforward=dim_feedforward,
+        #     dropout=dropout,
+        #     dc=dc,
+        #     cross_coverage=cross_coverage,
+        #     self_coverage=self_coverage,
+        # )
 
         self.exprate_recorder = ExpRateRecorder()
+
+    def setup(self, stage=None):
+        if self.comer_model is None:
+            self.comer_model = CoMER(
+                d_model=self.hparams.d_model,
+                growth_rate=self.hparams.growth_rate,
+                num_layers=self.hparams.num_layers,
+                nhead=self.hparams.nhead,
+                num_decoder_layers=self.hparams.num_decoder_layers,
+                dim_feedforward=self.hparams.dim_feedforward,
+                use_moe=self.hparams.use_moe,
+                dropout=self.hparams.dropout,
+                dc=self.hparams.dc,
+                cross_coverage=self.hparams.cross_coverage,
+                self_coverage=self.hparams.self_coverage,
+            )
 
     def forward(
         self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor
@@ -84,26 +102,35 @@ class LitCoMER(pl.LightningModule):
         output = self(batch.imgs, batch.mask, tgt)
         out_hat, l_aux = output[0], output[1]
 
-        loss = ce_loss(out_hat, out)
-        l_aux = l_aux * self.hparams.l_aux_weight
-        total_loss = loss + l_aux
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("train_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("train_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        if self.hparams.use_moe and l_aux is not None:
+            loss = ce_loss(out_hat, out)
+            l_aux = l_aux * self.hparams.l_aux_weight
+            total_loss = loss + l_aux
+            self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
 
-        return loss
+            return total_loss
+        else:
+            loss = ce_loss(out_hat, out)
+            self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            return loss
 
     def validation_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
         output = self(batch.imgs, batch.mask, tgt)
         out_hat, l_aux = output[0], output[1]
 
-        loss = ce_loss(out_hat, out)
-        l_aux = l_aux * self.hparams.l_aux_weight
-        total_loss = loss + l_aux
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("val_total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("val_l_aux", l_aux, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        if self.hparams.use_moe and l_aux is not None:
+            loss = ce_loss(out_hat, out)
+            l_aux = l_aux * self.hparams.l_aux_weight
+            total_loss = loss + l_aux
+            self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        else:
+            loss = ce_loss(out_hat, out)
+            self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
 
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)

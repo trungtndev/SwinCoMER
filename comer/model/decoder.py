@@ -15,6 +15,7 @@ from fairscale.nn.moe import (
     Top2Gate,
     # MOELayer,
 )
+import torch.distributed as dist
 
 from comer.model.transformer.attention import MultiheadAttention, precompute_freqs_cis
 from comer.model.transformer.arm import AttentionRefinementModule
@@ -55,13 +56,23 @@ class FFN(nn.Module):
 class MoE(nn.Module):
     def __init__(self, d_model, dim_feedforward, dropout, num_experts):
         super(MoE, self).__init__()
+        if dist.is_initialized():
+            world_size = dist.get_world_size()
+        else:
+            world_size = 1
+        assert num_experts % world_size == 0, \
+            "num_experts must be divisible by world_size"
+        num_local_experts = num_experts // world_size
+
+        print("MoE world size:", world_size)
+        if num_local_experts == num_experts:
+            print(f"Using MoE with {num_experts} experts on a single device.")
+
         self.moe = MOELayer(
             Top2Gate(model_dim=d_model, num_experts=num_experts),
             nn.ModuleList([
-                # copy.deepcopy(
                     FFN(d_model, dim_feedforward, dropout)
-                # )
-                for _ in range(num_experts)
+                for _ in range(num_local_experts)
             ])
         )
 
@@ -77,7 +88,7 @@ class MoE(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1):
+    def __init__(self, d_model, nhead, dim_feedforward, dropout, use_moe, num_experts=None):
         super(TransformerDecoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -90,7 +101,11 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
         self.dropout3 = nn.Dropout(dropout)
 
-        self.ffn = MoE(d_model, dim_feedforward, dropout, num_experts=4)
+        self.use_moe = use_moe
+        if use_moe:
+            self.ffn = MoE(d_model, dim_feedforward, dropout, num_experts=num_experts)
+        else:
+            self.ffn = FFN(d_model, dim_feedforward, dropout)
 
     # def forward(
     #         self,
@@ -164,7 +179,11 @@ class TransformerDecoderLayer(nn.Module):
         )
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)  # post-norm
-        tgt2, l_aux = self.ffn(tgt)
+        if self.use_moe:
+            tgt2, l_aux = self.ffn(tgt)
+        else:
+            tgt2 = self.ffn(tgt)
+            l_aux = None
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)  # post-norm
         return tgt, attn, l_aux
@@ -178,26 +197,28 @@ class TransformerDecoder(nn.Module):
             dim_feedforward: int,
             dropout: float,
             num_layers: int,
+            use_moe: bool,
             arm: Optional[AttentionRefinementModule],
             end: int,
             theta: float,
-            norm=None,
-
     ):
         super(TransformerDecoder, self).__init__()
         self.num_layers = num_layers
+        self.use_moe = use_moe
         self.layers = nn.ModuleList([
             # copy.deepcopy(
                 TransformerDecoderLayer(
                     d_model=d_model,
                     nhead=nhead,
                     dim_feedforward=dim_feedforward,
+                    use_moe=use_moe,
                     dropout=dropout
                 # ),
             )
             for _ in range(num_layers)
         ])
-        self.norm = norm
+        # self.norm = nn.LayerNorm(d_model)
+        self.norm = None
         self.arm = arm
 
         # self.freqs_cis = precompute_freqs_cis(dim=d_model // nhead, end=end, theta=theta)
@@ -217,7 +238,7 @@ class TransformerDecoder(nn.Module):
         # current_freqs_cis = self.freqs_cis[:tgt.size(0)]
         current_freqs_cis = None
         arm = None
-        l_aux = 0.0
+        l_aux = 0.0 if self.use_moe else None
         for i, mod in enumerate(self.layers):
             output, attn, cur_l_aux = mod(
                 output,
@@ -231,7 +252,9 @@ class TransformerDecoder(nn.Module):
             )
             if i != len(self.layers) - 1 and self.arm is not None:
                 arm = partial(self.arm, attn, memory_key_padding_mask, height)
-            l_aux += cur_l_aux
+
+            if self.use_moe and cur_l_aux is not None:
+                l_aux += cur_l_aux
 
         if self.norm is not None:
             output = self.norm(output)
@@ -248,6 +271,7 @@ class Decoder(DecodeModel):
             dim_feedforward: int,
             dropout: float,
             dc: int,
+            use_moe: bool,
             cross_coverage: bool,
             self_coverage: bool,
             end: int = 512,
@@ -267,6 +291,7 @@ class Decoder(DecodeModel):
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             num_layers=num_decoder_layers,
+            use_moe=use_moe,
             arm=AttentionRefinementModule(
                 nhead, dc, cross_coverage, self_coverage
             ) if (cross_coverage or self_coverage) else None,
