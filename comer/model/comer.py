@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -21,6 +21,7 @@ class CoMER(pl.LightningModule):
         num_decoder_layers: int,
         dim_feedforward: int,
         use_moe: bool,
+        num_experts: Optional[int],
         dropout: float,
         dc: int,
         cross_coverage: bool,
@@ -38,6 +39,7 @@ class CoMER(pl.LightningModule):
             num_decoder_layers=num_decoder_layers,
             dim_feedforward=dim_feedforward,
             use_moe=use_moe,
+            num_experts=num_experts,
             dropout=dropout,
             dc=dc,
             cross_coverage=cross_coverage,

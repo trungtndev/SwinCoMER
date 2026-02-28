@@ -198,6 +198,7 @@ class TransformerDecoder(nn.Module):
             dropout: float,
             num_layers: int,
             use_moe: bool,
+            num_experts: Optional[int],
             arm: Optional[AttentionRefinementModule],
             end: int,
             theta: float,
@@ -212,7 +213,8 @@ class TransformerDecoder(nn.Module):
                     nhead=nhead,
                     dim_feedforward=dim_feedforward,
                     use_moe=use_moe,
-                    dropout=dropout
+                    dropout=dropout,
+                    num_experts=num_experts,
                 # ),
             )
             for _ in range(num_layers)
@@ -272,6 +274,7 @@ class Decoder(DecodeModel):
             dropout: float,
             dc: int,
             use_moe: bool,
+            num_experts: Optional[int],
             cross_coverage: bool,
             self_coverage: bool,
             end: int = 512,
@@ -292,6 +295,7 @@ class Decoder(DecodeModel):
             dropout=dropout,
             num_layers=num_decoder_layers,
             use_moe=use_moe,
+            num_experts=num_experts,
             arm=AttentionRefinementModule(
                 nhead, dc, cross_coverage, self_coverage
             ) if (cross_coverage or self_coverage) else None,
