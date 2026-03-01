@@ -30,7 +30,7 @@ class SwiGLU(nn.Module):
         self.fc1 = nn.Linear(d_model, dim_feedforward)
         self.fc2 = nn.Linear(d_model, dim_feedforward)
         self.fc3 = nn.Linear(dim_feedforward, d_model)
-        self.act = nn.SiLU()
+        self.act = nn.SiLU(inplace=True)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
@@ -47,7 +47,7 @@ class FFN(nn.Module):
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
-        self.act = nn.ReLU()
+        self.act = nn.ReLU(inplace=True)
 
     def forward(self, x):
         return self.linear2(self.dropout(self.act(self.linear1(x))))
