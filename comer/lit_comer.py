@@ -148,6 +148,7 @@ class LitCoMER(pl.LightningModule):
             on_epoch=True,
         )
 
+    @torch.inference_mode()
     def test_step(self, batch: Batch, _):
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
         self.exprate_recorder([h.seq for h in hyps], batch.indices)
