@@ -11,15 +11,16 @@ from comer.model.pos_enc import WordPosEnc
 import torch.nn.functional as F
 from torch import Tensor
 from functools import partial
-from fairscale.nn.moe import (
-    Top2Gate,
-    # MOELayer,
-)
+# from fairscale.nn.moe import (
+#     Top2Gate,
+#     MOELayer,
+# )
 import torch.distributed as dist
 
 from comer.model.transformer.attention import MultiheadAttention, precompute_freqs_cis
 from comer.model.transformer.arm import AttentionRefinementModule
 from comer.model.transformer.moe import MOELayer
+from comer.model.transformer.top2gate import Top2Gate
 
 from comer.utils.generation_utils import DecodeModel
 
