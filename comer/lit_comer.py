@@ -120,7 +120,7 @@ class LitCoMER(pl.LightningModule):
             self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
             return loss
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def validation_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device)
         output = self(batch.imgs, batch.mask, tgt)
