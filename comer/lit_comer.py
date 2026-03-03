@@ -1,3 +1,4 @@
+import warnings
 import zipfile
 from typing import List
 
@@ -41,6 +42,9 @@ class LitCoMER(pl.LightningModule):
             learning_rate: float,
             patience: int,
             l_aux_weight: float,
+            perturb_mode: str,
+            perturb_prob: float,
+
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -62,6 +66,12 @@ class LitCoMER(pl.LightningModule):
         )
 
         self.exprate_recorder = ExpRateRecorder()
+        if perturb_mode != "none" and perturb_prob == 0.0:
+            warnings.warn(
+                f"perturb_mode='{perturb_mode}' but perturb_prob={perturb_prob}. "
+                f"Please set perturb_prob > 0 to enable perturbation. ",
+                stacklevel=2,
+            )
 
     # def setup(self, stage=None):
     #     if self.comer_model is None:
@@ -102,7 +112,7 @@ class LitCoMER(pl.LightningModule):
         return self.comer_model(img, img_mask, tgt)
 
     def training_step(self, batch: Batch, _):
-        tgt, out = to_bi_tgt_out(batch.indices, self.device)
+        tgt, out = to_bi_tgt_out(batch.indices, self.device, self.hparams.perturb_mode, self.hparams.perturb_prob)
         output = self(batch.imgs, batch.mask, tgt)
         out_hat, l_aux = output[0], output[1]
 
@@ -122,7 +132,7 @@ class LitCoMER(pl.LightningModule):
 
     @torch.inference_mode()
     def validation_step(self, batch: Batch, _):
-        tgt, out = to_bi_tgt_out(batch.indices, self.device)
+        tgt, out = to_bi_tgt_out(batch.indices, self.device, "none", 0)
         output = self(batch.imgs, batch.mask, tgt)
         out_hat, l_aux = output[0], output[1]
 

@@ -2,35 +2,56 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from comer.datamodule import vocab
+from comer.datamodule import vocab, vocab_size
 from einops import rearrange
 from torch import LongTensor
 from torchmetrics import Metric
 
 from pytorch_lightning.callbacks import Callback
 
+SPECIAL_IDS = [
+    vocab.SOS_IDX,
+    vocab.EOS_IDX,
+    vocab.PAD_IDX,
+]
+STRUCTURE_IDS = [
+    vocab.word2idx[tok]
+    for tok in [
+        r"\frac",
+        r"\sqrt",
+        r"^",
+        r"_",
+        r"\limits",
+        r"\sum",
+        r"\int",
+        "(", ")",
+        "[", "]",
+        "{", "}",
+    ]
+]
+RADOM_PERTURB_TOKEN = [
+    idx
+    for idx in range(vocab_size) if idx not in SPECIAL_IDS
+]
+RADOM_PERTURB_TOKEN = torch.tensor(RADOM_PERTURB_TOKEN, dtype=torch.long)
 
-class ConditionalValidation(Callback):
-    def on_validation_start(self, trainer, pl_module):
-        train_loss = trainer.callback_metrics.get("train_loss")
-        if train_loss is not None and train_loss >= 1.0:
-            trainer.limit_val_batches = 0.0
-        else:
-            trainer.limit_val_batches = 1.0
+NON_STRUCTURE_PERTURB_TOKEN = [
+    idx
+    for idx in range(vocab_size)
+    if idx not in set(SPECIAL_IDS + STRUCTURE_IDS)
+]
+NON_STRUCTURE_PERTURB_TOKEN = torch.tensor(NON_STRUCTURE_PERTURB_TOKEN, dtype=torch.long)
 
-    def on_validation_end(self, trainer, pl_module):
-        if trainer.limit_val_batches == 0.0:
-            pl_module.log("val_ExpRate", 0.0, sync_dist=True)
 
 class Hypothesis:
     seq: List[int]
     score: float
 
     def __init__(
-        self,
-        seq_tensor: LongTensor,
-        score: float,
-        direction: str,
+            self,
+            seq_tensor: LongTensor,
+            score: float,
+            direction: str,
     ) -> None:
         assert direction in {"l2r", "r2l"}
         raw_seq = seq_tensor.tolist()
@@ -78,10 +99,10 @@ class ExpRateRecorder(Metric):
 
 
 def ce_loss(
-    output_hat: torch.Tensor,
-    output: torch.Tensor,
-    ignore_idx: int = vocab.PAD_IDX,
-    reduction: str = "mean",
+        output_hat: torch.Tensor,
+        output: torch.Tensor,
+        ignore_idx: int = vocab.PAD_IDX,
+        reduction: str = "mean",
 ) -> torch.Tensor:
     """comput cross-entropy loss
 
@@ -99,11 +120,61 @@ def ce_loss(
     return loss
 
 
+def perturb_random(
+        tokens: torch.Tensor,
+        valid_ids_tensor: torch.Tensor = RADOM_PERTURB_TOKEN,
+        prob: float = 0.1,
+):
+    if prob <= 0:
+        return tokens
+    new_token = tokens.clone()
+    rand_mask = torch.rand(tokens.shape) < prob
+    if not rand_mask.any():
+        return new_token
+
+    rand_idx = torch.randint(0, len(valid_ids_tensor), size=tokens.shape, )
+    random_tokens = valid_ids_tensor[rand_idx]
+    same_mask = random_tokens == tokens
+    random_tokens[same_mask] = valid_ids_tensor[
+        (rand_idx[same_mask] + 1) % len(valid_ids_tensor)
+    ]
+    new_token[rand_mask] = random_tokens[rand_mask]
+    return new_token
+
+
+def perturb_structure_random(
+        tokens: torch.Tensor,
+        prob: float = 0.1,
+        structure_perturb_token=NON_STRUCTURE_PERTURB_TOKEN,
+):
+    if prob <= 0:
+        return tokens
+
+    new_tokens = tokens.clone()
+    perturb_mask = torch.rand(tokens.shape) < prob
+
+    if not perturb_mask.any():
+        return new_tokens
+    pool = structure_perturb_token
+    rand_idx = torch.randint(0, len(pool), size=tokens.shape, )
+    random_tokens = pool[rand_idx]
+    # tránh random trùng chính nó
+    same_mask = random_tokens == tokens
+    random_tokens[same_mask] = pool[
+        (rand_idx[same_mask] + 1) % len(pool)
+        ]
+    valid_mask = perturb_mask & torch.isin(tokens, pool)
+    new_tokens[valid_mask] = random_tokens[valid_mask]
+    return new_tokens
+
+# perturb_mode: { none, radom, structure_random }
 def to_tgt_output(
-    tokens: Union[List[List[int]], List[LongTensor]],
-    direction: str,
-    device: torch.device,
-    pad_to_len: Optional[int] = None,
+        tokens: Union[List[List[int]], List[LongTensor]],
+        direction: str,
+        device: torch.device,
+        pad_to_len: Optional[int] = None,
+        perturb_mode: Optional[str] = None,
+        perturb_prob: float = 0.1,
 ) -> Tuple[LongTensor, LongTensor]:
     """Generate tgt and out for indices
 
@@ -156,7 +227,12 @@ def to_tgt_output(
 
     for i, token in enumerate(tokens):
         tgt[i, 0] = start_w
-        tgt[i, 1 : (1 + lens[i])] = token
+        if perturb_mode == "random":
+            tgt[i, 1: (1 + lens[i])] = perturb_random(token, perturb_prob)
+        elif perturb_mode == "structure_random":
+            tgt[i, 1: (1 + lens[i])] = perturb_structure_random(token, perturb_prob)
+        else:
+            tgt[i, 1: (1 + lens[i])] = token
 
         out[i, : lens[i]] = token
         out[i, lens[i]] = stop_w
@@ -165,7 +241,7 @@ def to_tgt_output(
 
 
 def to_bi_tgt_out(
-    tokens: List[List[int]], device: torch.device
+        tokens: List[List[int]], device: torch.device, perturb_mode: str = "none", perturb_prob=0.1
 ) -> Tuple[LongTensor, LongTensor]:
     """Generate bidirection tgt and out
 
@@ -180,8 +256,8 @@ def to_bi_tgt_out(
     Tuple[LongTensor, LongTensor]
         tgt, out: [2b, l], [2b, l]
     """
-    l2r_tgt, l2r_out = to_tgt_output(tokens, "l2r", device)
-    r2l_tgt, r2l_out = to_tgt_output(tokens, "r2l", device)
+    l2r_tgt, l2r_out = to_tgt_output(tokens, "l2r", device, perturb_mode=perturb_mode, perturb_prob=perturb_prob)
+    r2l_tgt, r2l_out = to_tgt_output(tokens, "r2l", device, perturb_mode=perturb_mode, perturb_prob=perturb_prob)
 
     tgt = torch.cat((l2r_tgt, r2l_tgt), dim=0)
     out = torch.cat((l2r_out, r2l_out), dim=0)
