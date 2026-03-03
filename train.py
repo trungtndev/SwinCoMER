@@ -6,9 +6,11 @@ from comer.datamodule import CROHMEDatamodule
 from comer.lit_comer import LitCoMER
 from sconf import Config
 import pytorch_lightning as pl
-from pytorch_lightning.strategies import DDPStrategy
+from pytorch_lightning.strategies import (
+    DDPStrategy,
+    SingleDeviceStrategy,
+)
 import torch.distributed as dist
-
 
 torch.set_float32_matmul_precision('high')
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -33,12 +35,12 @@ def train(config: Config):
     checkpoint_callback = pl.callbacks.ModelCheckpoint(**config.callbacks[1].init_args)
     # early_stop_callback = pl.callbacks.EarlyStopping(**config.callbacks[0].init_args)
 
-
     trainer = pl.Trainer(
         **config.trainer,
-        strategy=DDPStrategy(find_unused_parameters=False),
         # logger=logger,
         callbacks=[lr_callback, checkpoint_callback],
+        strategy=DDPStrategy(find_unused_parameters=False),
+        # strategy=SingleDeviceStrategy(),
     )
 
     trainer.fit(model_module, data_module)
