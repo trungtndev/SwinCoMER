@@ -10,7 +10,9 @@ from pytorch_lightning.strategies import (
     DDPStrategy,
     SingleDeviceStrategy,
 )
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 import torch.distributed as dist
+from comer.utils.callbacks import ProgressProcTitle
 
 torch.set_float32_matmul_precision('high')
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -28,19 +30,18 @@ def train(config: Config):
     model_module = LitCoMER(**config.model)
     data_module = CROHMEDatamodule(**config.data)
 
-    # logger = Logger(**config.wandb, config=dict(config))
-    # logger.watch(model_module, log="all", log_freq=500)
-
-    lr_callback = pl.callbacks.LearningRateMonitor(**config.callbacks[0].init_args)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(**config.callbacks[1].init_args)
     # early_stop_callback = pl.callbacks.EarlyStopping(**config.callbacks[0].init_args)
 
     trainer = pl.Trainer(
         **config.trainer,
         # logger=logger,
-        callbacks=[lr_callback, checkpoint_callback],
+        callbacks=[
+            LearningRateMonitor(**config.callbacks[0].init_args),
+            ModelCheckpoint(**config.callbacks[1].init_args),
+            ProgressProcTitle(base_name="HMER", monitor="val_ExpRate"),
+        ],
         strategy=DDPStrategy(find_unused_parameters=False),
-        # strategy=SingleDeviceStrategy(),
+        # strategy=SingleDeviceStrategy(device="cuda:0"),
     )
 
     trainer.fit(model_module, data_module)
