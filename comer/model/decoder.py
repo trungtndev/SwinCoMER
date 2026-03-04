@@ -23,6 +23,7 @@ from comer.model.transformer.moe import MOELayer
 from comer.model.transformer.top2gate import Top2Gate
 
 from comer.utils.generation_utils import DecodeModel
+import warnings
 
 
 class SwiGLU(nn.Module):
@@ -65,14 +66,14 @@ class MoE(nn.Module):
             "num_experts must be divisible by world_size"
         num_local_experts = num_experts // world_size
 
-        print("MoE world size:", world_size)
+        warnings.warn(f"MoE world size: {world_size}")
         if num_local_experts == num_experts:
-            print(f"Using MoE with {num_experts} experts on a single device.")
+            warnings.warn(f"Using MoE with {num_experts} experts on a single device.")
 
         self.moe = MOELayer(
             Top2Gate(model_dim=d_model, num_experts=num_experts),
             nn.ModuleList([
-                    FFN(d_model, dim_feedforward, dropout)
+                FFN(d_model, dim_feedforward, dropout)
                 for _ in range(num_local_experts)
             ])
         )
@@ -214,13 +215,13 @@ class TransformerDecoder(nn.Module):
         self.use_moe = use_moe
         self.layers = nn.ModuleList([
             # copy.deepcopy(
-                TransformerDecoderLayer(
-                    d_model=d_model,
-                    nhead=nhead,
-                    dim_feedforward=dim_feedforward,
-                    use_moe=use_moe,
-                    dropout=dropout,
-                    num_experts=num_experts,
+            TransformerDecoderLayer(
+                d_model=d_model,
+                nhead=nhead,
+                dim_feedforward=dim_feedforward,
+                use_moe=use_moe,
+                dropout=dropout,
+                num_experts=num_experts,
                 # ),
             )
             for _ in range(num_layers)
