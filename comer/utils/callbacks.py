@@ -8,7 +8,7 @@ class ProgressProcTitle(pl.Callback):
         self.base_name = base_name
         self.monitor = monitor
         self.metric = 0.0
-        self.title_template = "{base_name} | epoch {current_epoch}/{max_epochs} | {metric_value:.4f}"
+        self.title_template = "{base_name} | Epoch {current_epoch}/{max_epochs} | {metric_value:.4f}"
 
     def on_train_epoch_start(self, trainer, pl_module):
         self._update_title(trainer)
