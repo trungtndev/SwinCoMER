@@ -30,6 +30,7 @@ class LitCoMER(pl.LightningModule):
             dc: int,
             use_moe: bool,
             num_experts: int,
+            qk_norm: bool,
             cross_coverage: bool,
             self_coverage: bool,
             # beam search
@@ -59,6 +60,7 @@ class LitCoMER(pl.LightningModule):
             dim_feedforward=dim_feedforward,
             use_moe=use_moe,
             num_experts=num_experts,
+            qk_norm=qk_norm,
             dropout=dropout,
             dc=dc,
             cross_coverage=cross_coverage,
@@ -73,22 +75,23 @@ class LitCoMER(pl.LightningModule):
                 stacklevel=2,
             )
 
-    # def setup(self, stage=None):
-    #     if self.comer_model is None:
-    #         self.comer_model = CoMER(
-    #             d_model=self.hparams.d_model,
-    #             growth_rate=self.hparams.growth_rate,
-    #             num_layers=self.hparams.num_layers,
-    #             nhead=self.hparams.nhead,
-    #             num_decoder_layers=self.hparams.num_decoder_layers,
-    #             dim_feedforward=self.hparams.dim_feedforward,
-    #             use_moe=self.hparams.use_moe,
-    #             num_experts=self.hparams.num_experts,
-    #             dropout=self.hparams.dropout,
-    #             dc=self.hparams.dc,
-    #             cross_coverage=self.hparams.cross_coverage,
-    #             self_coverage=self.hparams.self_coverage,
-    #         )
+    def setup(self, stage=None):
+        if self.comer_model is None:
+            self.comer_model = CoMER(
+                d_model=self.hparams.d_model,
+                growth_rate=self.hparams.growth_rate,
+                num_layers=self.hparams.num_layers,
+                nhead=self.hparams.nhead,
+                num_decoder_layers=self.hparams.num_decoder_layers,
+                dim_feedforward=self.hparams.dim_feedforward,
+                use_moe=self.hparams.use_moe,
+                num_experts=self.hparams.num_experts,
+                qk_norm=self.hparams.qk_norm,
+                dropout=self.hparams.dropout,
+                dc=self.hparams.dc,
+                cross_coverage=self.hparams.cross_coverage,
+                self_coverage=self.hparams.self_coverage,
+            )
 
     def forward(
             self, img: FloatTensor, img_mask: LongTensor, tgt: LongTensor

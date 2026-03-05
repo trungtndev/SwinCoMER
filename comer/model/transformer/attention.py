@@ -320,14 +320,14 @@ def multi_head_attention_forward(
         # Ép về (tgt_len, bsz, num_heads, head_dim) để norm từng head
         q = q.contiguous().view(tgt_len, bsz, num_heads, head_dim)
         q = q_norm(q)
-        q = q.view(tgt_len, bsz, embed_dim)  # Trả lại shape gốc để tương thích code dưới
+        q = q.view(tgt_len, bsz, embed_dim)
 
         if k is not None:
             src_len = k.size(0)
             k = k.contiguous().view(src_len, bsz, num_heads, head_dim)
             k = k_norm(k)
             k = k.view(src_len, bsz, embed_dim)
-    # ==========================================================
+    # ================================================================================================================
     q = q * scaling
 
     if attn_mask is not None:
