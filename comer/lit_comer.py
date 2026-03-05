@@ -77,6 +77,7 @@ class LitCoMER(pl.LightningModule):
 
     def setup(self, stage=None):
         if self.comer_model is None:
+            warnings.warn("Model is not initialized. Build models dynamically...", stacklevel=2)
             self.comer_model = CoMER(
                 d_model=self.hparams.d_model,
                 growth_rate=self.hparams.growth_rate,
