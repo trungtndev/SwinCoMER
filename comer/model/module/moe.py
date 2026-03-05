@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 else:
     Base = Module
 
+
 # einsum dimensions: (g)roup, (s)equence, (e)xpert, (m)odel, (c)apacity
 # See https://arxiv.org/pdf/2006.16668.pdf for details.
 
@@ -89,3 +90,32 @@ class MOELayer(Base):
         expert_output = expert_output.reshape(self.world_size * self.num_local_experts, -1, d_model)
         combined_output = torch.einsum("sec,ecm->sm", combine_weights, expert_output)
         return combined_output.reshape(input[0].shape)
+
+
+class BaseMOELayer(Base):
+    def __init__(self, gate: Module, experts: Union[Module, ModuleList]) -> None:
+        super().__init__()
+        self.gate = gate
+        if type(experts) == ModuleList:
+            self.experts = cast(ModuleList, experts)
+        else:
+            self.experts = ModuleList([experts])
+        self.num_local_experts = len(self.experts)
+
+    def forward(self, *input: Tensor, **kwargs: Any) -> Tensor:
+        assert len(input) == 1
+        x = input[0]
+        assert x.dim() == 3
+
+        B, S, D = x.shape
+        x_flat = x.reshape(-1, D)
+        self.l_aux, combine_weights, dispatch_mask = self.gate(x_flat)
+        dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.float(), x_flat)
+        expert_outputs = []
+        for expert, expert_input in zip(self.experts, dispatched_input):
+            expert_outputs.append(expert(expert_input))
+        expert_output = torch.stack(expert_outputs)
+
+        combined_output = torch.einsum("sec,ecm->sm", combine_weights, expert_output)
+
+        return combined_output.reshape(B, S, D)

@@ -17,10 +17,11 @@ from functools import partial
 # )
 import torch.distributed as dist
 
-from comer.model.transformer.attention import MultiheadAttention, precompute_freqs_cis
-from comer.model.transformer.arm import AttentionRefinementModule
-from comer.model.transformer.moe import MOELayer
-from comer.model.transformer.top2gate import Top2Gate
+from comer.model.module.attention import MultiheadAttention
+from comer.model.module.rope import precompute_freqs_cis
+from comer.model.module.arm import AttentionRefinementModule
+from comer.model.module.moe import MOELayer, BaseMOELayer
+from comer.model.module.top2gate import Top2Gate
 
 from comer.utils.generation_utils import DecodeModel
 import warnings
@@ -70,7 +71,7 @@ class MoE(nn.Module):
         if num_local_experts == num_experts:
             warnings.warn(f"Using MoE with {num_experts} experts on a single device.")
 
-        self.moe = MOELayer(
+        self.moe = BaseMOELayer(
             Top2Gate(model_dim=d_model, num_experts=num_experts),
             nn.ModuleList([
                 FFN(d_model, dim_feedforward, dropout)
