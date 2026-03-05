@@ -294,7 +294,7 @@ class Decoder(DecodeModel):
 
         self.word_embed = nn.Embedding(vocab_size, d_model)
         self.pos_enc = WordPosEnc(d_model=d_model)
-        self.norm = nn.LayerNorm(d_model)
+        # self.norm = nn.LayerNorm(d_model)
 
         # self.dropout = nn.Dropout(dropout)
 
@@ -350,7 +350,7 @@ class Decoder(DecodeModel):
 
         tgt = self.word_embed(tgt)
         tgt = self.pos_enc(tgt)
-        tgt = self.norm(tgt)
+        # tgt = self.norm(tgt)
         # tgt = self.dropout(tgt)
 
         h = src.shape[1]
