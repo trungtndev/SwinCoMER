@@ -26,7 +26,6 @@ class MultiHeadAttnBlock(nn.Module):
         self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0, bias=use_bias)
 
         self.attn_dropout = nn.Dropout(attn_dropout)
-        self.proj_dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask=None):
         b, c, h, w = x.shape
@@ -47,11 +46,8 @@ class MultiHeadAttnBlock(nn.Module):
         h_ = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         h_ = h_.transpose(2, 3).reshape(b, c, h, w)
         h_ = self.attn_dropout(h_)
-
         h_ = self.proj_out(h_)
-        h_ = self.proj_dropout(h_)
-
-        return x + h_
+        return h_
 
 
 # DenseNet-B
@@ -86,7 +82,7 @@ class _Bottleneck(nn.Module):
             out = self.self_attn(out, mask)
 
         if self.use_dropout:
-            out = self.dropout(out)
+            out = out + F.dropout(self.dropout(out), p=0.2, training=self.training)
 
         out = torch.cat((x, out), 1)
         return out
@@ -111,7 +107,7 @@ class _SingleLayer(nn.Module):
         if self.use_dropout:
             out = self.dropout(out)
         if self.use_attn:
-            out = self.self_attn(out, mask)
+            out = out + F.dropout(self.dropout(out), p=0.2, training=self.training)
         out = torch.cat((x, out), 1)
         return out
 

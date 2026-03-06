@@ -91,10 +91,10 @@ class MoE(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward, dropout, qk_norm, use_moe, num_experts=None):
+    def __init__(self, d_model, nhead, dim_feedforward, dropout, attn_dropout, qk_norm, use_moe, num_experts=None):
         super(TransformerDecoderLayer, self).__init__()
-        self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, qk_norm=qk_norm)
-        self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout, qk_norm=qk_norm)
+        self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
+        self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
 
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -204,6 +204,7 @@ class TransformerDecoder(nn.Module):
             nhead: int,
             dim_feedforward: int,
             dropout: float,
+            attn_dropout: float,
             num_layers: int,
             use_moe: bool,
             num_experts: Optional[int],
@@ -223,6 +224,7 @@ class TransformerDecoder(nn.Module):
                 dim_feedforward=dim_feedforward,
                 use_moe=use_moe,
                 dropout=dropout,
+                attn_dropout=attn_dropout,
                 num_experts=num_experts,
                 qk_norm=qk_norm,
                 # ),
@@ -282,6 +284,7 @@ class Decoder(DecodeModel):
             num_decoder_layers: int,
             dim_feedforward: int,
             dropout: float,
+            attn_dropout: float,
             dc: int,
             use_moe: bool,
             num_experts: Optional[int],
@@ -304,6 +307,7 @@ class Decoder(DecodeModel):
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
+            attn_dropout=attn_dropout,
             num_layers=num_decoder_layers,
             use_moe=use_moe,
             num_experts=num_experts,
