@@ -196,7 +196,7 @@ class LitCoMER(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.SGD(
-            self.parameters() if self.hparams.group_decay == 0 else self._decay_group(),
+            self.parameters() if not self.hparams.group_decay else self._decay_group(),
             lr=self.hparams.learning_rate,
             momentum=0.9,
             weight_decay=1e-4,
@@ -254,6 +254,9 @@ class LitCoMER(pl.LightningModule):
                 # Linear weight
                 elif pn.endswith("weight") and isinstance(m, linear_modules):
                     linear_decay.add(fpn)
+
+                else:
+                    warnings.warn(f"Unrecognized module {mn} in {pn}, ")
 
         param_dict = {pn: p for pn, p in self.named_parameters()}
 
