@@ -43,6 +43,7 @@ class LitCoMER(pl.LightningModule):
             # training
             learning_rate: float,
             patience: int,
+            group_decay: bool,
             l_aux_weight: float,
             perturb_mode: str,
             perturb_prob: float,
@@ -195,7 +196,7 @@ class LitCoMER(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.SGD(
-            self.parameters(),
+            self.parameters() if self.hparams.group_decay == 0 else self._decay_group(),
             lr=self.hparams.learning_rate,
             momentum=0.9,
             weight_decay=1e-4,
@@ -216,3 +217,63 @@ class LitCoMER(pl.LightningModule):
         }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+    def _decay_group(self):
+
+        cnn_decay = set()
+        linear_decay = set()
+        no_decay = set()
+
+        cnn_modules = (torch.nn.Conv2d,)
+        linear_modules = (torch.nn.Linear,)
+
+        blacklist_modules = (
+            torch.nn.LayerNorm,
+            torch.nn.Embedding,
+            torch.nn.BatchNorm2d,
+            torch.nn.GroupNorm,
+        )
+
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+
+                fpn = f"{mn}.{pn}" if mn else pn
+
+                # bias → no decay
+                if pn.endswith("bias"):
+                    no_decay.add(fpn)
+
+                # norm / embedding → no decay
+                elif pn.endswith("weight") and isinstance(m, blacklist_modules):
+                    no_decay.add(fpn)
+
+                # CNN weight
+                elif pn.endswith("weight") and isinstance(m, cnn_modules):
+                    cnn_decay.add(fpn)
+
+                # Linear weight
+                elif pn.endswith("weight") and isinstance(m, linear_modules):
+                    linear_decay.add(fpn)
+
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+
+        inter_params = (cnn_decay | linear_decay) & no_decay
+        assert len(inter_params) == 0
+
+        union_params = cnn_decay | linear_decay | no_decay
+        assert len(param_dict.keys() - union_params) == 0
+
+        return [
+            {
+                "params": [param_dict[pn] for pn in sorted(cnn_decay)],
+                "weight_decay": 1e-4,
+            },
+            {
+                "params": [param_dict[pn] for pn in sorted(linear_decay)],
+                "weight_decay": 0.01,
+            },
+            {
+                "params": [param_dict[pn] for pn in sorted(no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
