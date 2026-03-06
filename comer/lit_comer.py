@@ -219,6 +219,8 @@ class LitCoMER(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def _decay_group(self):
+        if self.trainer.is_global_zero:
+            print("Grouping parameters for weight decay...")
 
         cnn_decay = set()
         linear_decay = set()
@@ -265,6 +267,8 @@ class LitCoMER(pl.LightningModule):
 
         union_params = cnn_decay | linear_decay | no_decay
         assert len(param_dict.keys() - union_params) == 0
+        if self.trainer.is_global_zero:
+            print("Finish grouping parameters for weight decay.")
 
         return [
             {
