@@ -93,9 +93,10 @@ class MoE(nn.Module):
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward, dropout, attn_dropout, qk_norm, use_moe, num_experts=None):
         super(TransformerDecoderLayer, self).__init__()
-        self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
-        self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
-
+        # self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
+        # self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=attn_dropout)
+        self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=attn_dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.norm3 = nn.LayerNorm(d_model)
@@ -173,7 +174,8 @@ class TransformerDecoderLayer(nn.Module):
             memory_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
         tgt2 = self.self_attn(
-            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
+            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
+            #freqs_cis=freqs_cis
         )[0]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)  # post-norm
@@ -181,7 +183,7 @@ class TransformerDecoderLayer(nn.Module):
             tgt,
             memory,
             memory,
-            arm=arm,
+            # arm=arm,
             attn_mask=memory_mask,
             key_padding_mask=memory_key_padding_mask,
         )
@@ -217,7 +219,6 @@ class TransformerDecoder(nn.Module):
         self.num_layers = num_layers
         self.use_moe = use_moe
         self.layers = nn.ModuleList([
-            # copy.deepcopy(
             TransformerDecoderLayer(
                 d_model=d_model,
                 nhead=nhead,
@@ -227,7 +228,6 @@ class TransformerDecoder(nn.Module):
                 attn_dropout=attn_dropout,
                 num_experts=num_experts,
                 qk_norm=qk_norm,
-                # ),
             )
             for _ in range(num_layers)
         ])
