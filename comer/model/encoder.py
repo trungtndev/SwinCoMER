@@ -184,18 +184,22 @@ class DenseNet(nn.Module):
     def forward(self, x, x_mask):
         out = self.conv1(x)
         out = self.norm1(out)
-        out_mask = x_mask[:, 0::2, 0::2]
+        # out_mask = x_mask[:, 0::2, 0::2]
+        out_mask = (-F.max_pool2d(-x_mask.float(), kernel_size=7, stride=2, padding=3)).bool()
         out = F.relu(out, inplace=True)
         out = F.max_pool2d(out, 2, ceil_mode=True)
-        out_mask = out_mask[:, 0::2, 0::2]
+        # out_mask = out_mask[:, 0::2, 0::2]
+        out_mask = (-F.max_pool2d(-out_mask.float(), 2, ceil_mode=True)).bool()
         for layer in self.dense1:
             out = layer(out, out_mask)
         out = self.trans1(out)
-        out_mask = out_mask[:, 0::2, 0::2]
+        # out_mask = out_mask[:, 0::2, 0::2]
+        out_mask = (-F.max_pool2d(-out_mask.float(), 2, ceil_mode=True)).bool()
         for layer in self.dense2:
             out = layer(out, out_mask)
         out = self.trans2(out)
-        out_mask = out_mask[:, 0::2, 0::2]
+        # out_mask = out_mask[:, 0::2, 0::2]
+        out_mask = (-F.max_pool2d(-out_mask.float(), 2, ceil_mode=True)).bool()
         for layer in self.dense3:
             out = layer(out, out_mask)
         out = self.post_norm(out)

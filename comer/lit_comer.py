@@ -232,17 +232,18 @@ class LitCoMER(pl.LightningModule):
         blacklist_modules = (
             torch.nn.LayerNorm,
             torch.nn.Embedding,
+            torch.nn.BatchNorm1d,
             torch.nn.BatchNorm2d,
             torch.nn.GroupNorm,
         )
 
         for mn, m in self.named_modules():
-            for pn, p in m.named_parameters():
+            for pn, p in m.named_parameters(recurse=False):
 
                 fpn = f"{mn}.{pn}" if mn else pn
 
                 # bias → no decay
-                if pn.endswith("bias"):
+                if pn.endswith("bias") or pn.endswith("in_proj_bias"):
                     no_decay.add(fpn)
 
                 # norm / embedding → no decay
@@ -254,7 +255,7 @@ class LitCoMER(pl.LightningModule):
                     cnn_decay.add(fpn)
 
                 # Linear weight
-                elif pn.endswith("weight") and isinstance(m, linear_modules):
+                elif (pn.endswith("weight") and isinstance(m, linear_modules)) or pn.endswith("in_proj_weight"):
                     linear_decay.add(fpn)
 
                 else:
