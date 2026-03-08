@@ -2,13 +2,13 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 import torch
 import torch.nn as nn
-from timm.models.swin_transformer import SwinTransformer
+from timm.models.swin_transformer_v2 import SwinTransformerV2
 
 class SwinEncoder(pl.LightningModule):
     def __init__(self, d_model):
         super().__init__()
 
-        self.swin = SwinTransformer(
+        self.swin = SwinTransformerV2(
             img_size=(224, 224),
             embed_dim=96,
             depths=[2, 2, 6, 2],
