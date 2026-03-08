@@ -1,11 +1,14 @@
-seed_everything: 7
+seed_everything: 36
 trainer:
   enable_checkpointing: true
   accelerator: gpu
-  check_val_every_n_epoch: 2
+  devices: 1
+  deterministic: false
+
   max_epochs: 300
-  deterministic: true
+  check_val_every_n_epoch: 4
   num_sanity_val_steps: 0
+  log_every_n_steps: 250
 
 callbacks:
   - class_path: pytorch_lightning.callbacks.LearningRateMonitor
@@ -19,23 +22,26 @@ callbacks:
       filename: '{epoch}-{step}-{val_ExpRate:.4f}'
 
 wandb:
- name:
+ name: d_model 128 seed 36
  project: "HMER"
  log_model: "all"
 
 model:
-  d_model: 256
+  d_model: 128
   # encoder
   growth_rate: 24
   num_layers: 16
   # decoder
   nhead: 8
-  num_decoder_layers: 3
-  dim_feedforward: 1024
+  num_decoder_layers: 6
+  dim_feedforward: 512
   dropout: 0.3
+  attn_dropout: 0.3
   dc: 32
   cross_coverage: true
   self_coverage: true
+  num_experts: 4
+  qk_norm: false
   # beam search
   beam_size: 10
   max_len: 200
@@ -44,11 +50,17 @@ model:
   temperature: 1.0
   # training
   learning_rate: 0.08
-  patience: 4
+  patience: 16
+  group_decay: true
+  l_aux_weight: 0.01
+  use_moe: false
+  perturb_mode: "none" # none radom  structure_random
+  perturb_prob: 0.0
+
 data:
   zipfile_path: data.zip
   test_year: "2014"
-  train_batch_size: 8
-  eval_batch_size: 8
+  train_batch_size: 2
+  eval_batch_size: 2
   num_workers: 12
   scale_aug: true
