@@ -94,14 +94,11 @@ class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward, dropout, attn_dropout, qk_norm, use_moe, num_experts=None):
         super(TransformerDecoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
-        self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
 
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.dropout3 = nn.Dropout(dropout)
 
         self.use_moe = use_moe
         if use_moe:
@@ -163,37 +160,23 @@ class TransformerDecoderLayer(nn.Module):
     def forward(
             self,
             tgt: Tensor,
-            memory: Tensor,
-            arm: Optional[AttentionRefinementModule],
-            freqs_cis: Tensor,
             tgt_mask: Optional[Tensor] = None,
-            memory_mask: Optional[Tensor] = None,
             tgt_key_padding_mask: Optional[Tensor] = None,
-            memory_key_padding_mask: Optional[Tensor] = None,
+            freqs_cis: Optional[Tensor] = None,
     ) -> Tensor:
-        tgt2 = self.self_attn(
+        tgt2, attn = self.self_attn(
             tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
             freqs_cis=freqs_cis
-        )[0]
+        )
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)  # post-norm
-        tgt2, attn = self.multihead_attn(
-            tgt,
-            memory,
-            memory,
-            arm=arm,
-            attn_mask=memory_mask,
-            key_padding_mask=memory_key_padding_mask,
-        )
-        tgt = tgt + self.dropout2(tgt2)
-        tgt = self.norm2(tgt)  # post-norm
         if self.use_moe:
             tgt2, l_aux = self.ffn(tgt)
         else:
             tgt2 = self.ffn(tgt)
             l_aux = None
-        tgt = tgt + self.dropout3(tgt2)
-        tgt = self.norm3(tgt)  # post-norm
+        tgt = tgt + self.dropout2(tgt2)
+        tgt = self.norm2(tgt)  # post-norm
         return tgt, attn, l_aux
 
 
@@ -209,7 +192,6 @@ class TransformerDecoder(nn.Module):
             use_moe: bool,
             num_experts: Optional[int],
             qk_norm: bool,
-            arm: Optional[AttentionRefinementModule],
             end: int,
             theta: float,
     ):
@@ -230,8 +212,6 @@ class TransformerDecoder(nn.Module):
             for _ in range(num_layers)
         ])
         # self.norm = nn.LayerNorm(d_model)
-        self.norm = None
-        self.arm = arm
 
         # self.freqs_cis = precompute_freqs_cis(dim=d_model // nhead, end=end, theta=theta)
         # self.register_buffer("freqs_cis", freqs_cis, persistent=False)
@@ -239,37 +219,25 @@ class TransformerDecoder(nn.Module):
     def forward(
             self,
             tgt: Tensor,
-            memory: Tensor,
-            height: int,
             tgt_mask: Optional[Tensor] = None,
-            memory_mask: Optional[Tensor] = None,
             tgt_key_padding_mask: Optional[Tensor] = None,
-            memory_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
         output = tgt
         # current_freqs_cis = self.freqs_cis[:tgt.size(0)]
         current_freqs_cis = None
-        arm = None
         l_aux = 0.0 if self.use_moe else None
         for i, mod in enumerate(self.layers):
             output, attn, cur_l_aux = mod(
-                output,
-                memory,
-                arm,
-                freqs_cis=current_freqs_cis,
+                tgt=output,
                 tgt_mask=tgt_mask,
-                memory_mask=memory_mask,
                 tgt_key_padding_mask=tgt_key_padding_mask,
-                memory_key_padding_mask=memory_key_padding_mask,
+                freqs_cis=current_freqs_cis,
             )
-            if i != len(self.layers) - 1 and self.arm is not None:
-                arm = partial(self.arm, attn, memory_key_padding_mask, height)
 
             if self.use_moe and cur_l_aux is not None:
                 l_aux += cur_l_aux
 
-        if self.norm is not None:
-            output = self.norm(output)
+        # output = self.norm(output)
 
         return output, l_aux
 
@@ -296,9 +264,6 @@ class Decoder(DecodeModel):
 
         self.word_embed = nn.Embedding(vocab_size, d_model)
         self.pos_enc = WordPosEnc(d_model=d_model)
-        # self.norm = nn.LayerNorm(d_model)
-
-        # self.dropout = nn.Dropout(dropout)
 
         self.model = TransformerDecoder(
             d_model=d_model,
@@ -310,67 +275,51 @@ class Decoder(DecodeModel):
             use_moe=use_moe,
             num_experts=num_experts,
             qk_norm=qk_norm,
-            arm=AttentionRefinementModule(
-                nhead, dc, cross_coverage, self_coverage
-            ) if (cross_coverage or self_coverage) else None,
             end=end,
             theta=theta,
         )
 
         self.proj = nn.Linear(d_model, vocab_size)
 
-    def _build_attention_mask(self, length):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.full(
-            (length, length), fill_value=1, dtype=torch.bool, device=self.device
+    def _build_attention_mask(self, n_img, n_txt):
+        total = n_img + n_txt
+        mask = torch.zeros(total, total, dtype=torch.bool, device=self.device)
+
+        text_start = n_img
+        text_mask = torch.triu(
+            torch.ones(n_txt, n_txt, dtype=torch.bool, device=self.device), 1
         )
-        mask.triu_(1)  # zero out the lower diagonal
+
+        mask[text_start:, text_start:] = text_mask
         return mask
 
     def forward(
             self, src: FloatTensor, src_mask: LongTensor, tgt: LongTensor
     ) -> FloatTensor:
-        """generate output for tgt
 
-        Parameters
-        ----------
-        src : FloatTensor
-            [b, h, w, d]
-        src_mask: LongTensor
-            [b, h, w]
-        tgt : LongTensor
-            [b, l]
+        b, l = tgt.size()
+        _, N, D = src.shape
 
-        Returns
-        -------
-        FloatTensor
-            [b, l, vocab_size]
-        """
-        _, l = tgt.size()
-        tgt_mask = self._build_attention_mask(l)
         tgt_pad_mask = tgt == vocab.PAD_IDX
 
         tgt = self.word_embed(tgt)
         tgt = self.pos_enc(tgt)
-        # tgt = self.norm(tgt)
-        # tgt = self.dropout(tgt)
 
-        h = src.shape[1]
-        src = rearrange(src, "b h w d -> (h w) b d")
-        src_mask = rearrange(src_mask, "b h w -> b (h w)")
+        tgt = torch.cat([src, tgt], dim=1)
+        tgt_mask = self._build_attention_mask(N, l)
+        tgt_pad_mask = torch.cat([src_mask, tgt_pad_mask], dim=1)
+
         tgt = rearrange(tgt, "b l d -> l b d")
 
         out, l_aux = self.model(
             tgt=tgt,
-            memory=src,
-            height=h,
             tgt_mask=tgt_mask,
             tgt_key_padding_mask=tgt_pad_mask,
-            memory_key_padding_mask=src_mask,
         )
 
         out = rearrange(out, "l b d -> b l d")
+        out = out[:, N:, :]
+
         out = self.proj(out)
 
         return out, l_aux
