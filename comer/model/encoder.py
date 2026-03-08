@@ -216,7 +216,7 @@ class Encoder(pl.LightningModule):
 
         self.pos_enc_2d = ImgPosEnc(d_model, normalize=True)
 
-        self.norm = nn.LayerNorm(d_model)
+        # self.norm = nn.LayerNorm(d_model)
 
     def forward(
         self, img: FloatTensor, img_mask: LongTensor
@@ -244,7 +244,7 @@ class Encoder(pl.LightningModule):
 
         # positional encoding
         feature = self.pos_enc_2d(feature, mask)
-        feature = self.norm(feature)
+        # feature = self.norm(feature)
 
         # flat to 1-D
         return feature, mask
