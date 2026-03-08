@@ -4,17 +4,20 @@ import cv2
 import numpy as np
 import torch
 from torch import Tensor
+import albumentations as A
 
 
-class ScaleToLimitRange:
-    def __init__(self, w_lo: int, w_hi: int, h_lo: int, h_hi: int) -> None:
+class ScaleToLimitRange(A.ImageOnlyTransform):
+    def __init__(self, w_lo: int, w_hi: int, h_lo: int, h_hi: int, always_apply=False, p=1.0) -> None:
+        super().__init__(p)
+
         assert w_lo <= w_hi and h_lo <= h_hi
         self.w_lo = w_lo
         self.w_hi = w_hi
         self.h_lo = h_lo
         self.h_hi = h_hi
 
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def apply(self, img, **params):
         h, w = img.shape[:2]
         r = h / w
         lo_r = self.h_lo / self.w_hi
@@ -42,13 +45,15 @@ class ScaleToLimitRange:
         return img
 
 
-class ScaleAugmentation:
-    def __init__(self, lo: float, hi: float) -> None:
+class ScaleAugmentation(A.ImageOnlyTransform):
+    def __init__(self, lo: float, hi: float, always_apply=False, p=1.0) -> None:
+        super().__init__(p)
+
         assert lo <= hi
         self.lo = lo
         self.hi = hi
 
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def apply(self, img: np.ndarray, **params) -> np.ndarray:
         k = np.random.uniform(self.lo, self.hi)
         img = cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_LINEAR)
         return img

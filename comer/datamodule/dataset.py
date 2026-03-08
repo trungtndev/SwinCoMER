@@ -2,6 +2,8 @@ import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
 import numpy as np
 import random
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 
 from .transforms import ScaleAugmentation, ScaleToLimitRange
@@ -12,7 +14,7 @@ K_MAX = 1.4
 H_LO = 16
 H_HI = 256
 W_LO = 16
-W_HI = 1024
+W_HI = 512
 
 class CROHMEDataset(Dataset):
     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
@@ -25,15 +27,27 @@ class CROHMEDataset(Dataset):
 
         trans_list += [
             ScaleToLimitRange(w_lo=W_LO, w_hi=W_HI, h_lo=H_LO, h_hi=H_HI),
-            tr.ToTensor(),
+            A.PadIfNeeded(
+                min_height=256,
+                min_width=512,
+                fill=0,
+                position="center"
+            ),
+            A.ToRGB(),
+            A.Normalize(
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225)
+            ),
+            ToTensorV2(),
+
         ]
-        self.transform = tr.Compose(trans_list)
+        self.transform = A.Compose(trans_list)
 
     def __getitem__(self, idx):
         fname, img, caption = self.ds[idx]
 
         # img = [self.transform(im) for im in img]
-        img = self.transform(np.array(img))
+        img = self.transform(image=np.array(img))["image"]
 
         return fname, img, caption
 

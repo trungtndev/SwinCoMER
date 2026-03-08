@@ -140,7 +140,7 @@ def collate_fn(batch):
     max_height_x = max(heights_x)
     max_width_x = max(widths_x)
 
-    x = torch.zeros(n_samples, 1, max_height_x, max_width_x)
+    x = torch.zeros(n_samples, 3, max_height_x, max_width_x)
     x_mask = torch.ones(n_samples, max_height_x, max_width_x, dtype=torch.bool)
     for idx, s_x in enumerate(images_x):
         x[idx, :, : heights_x[idx], : widths_x[idx]] = s_x
