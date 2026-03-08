@@ -106,57 +106,6 @@ class TransformerDecoderLayer(nn.Module):
         else:
             self.ffn = FFN(d_model, dim_feedforward, dropout)
 
-    # def forward(
-    #         self,
-    #         tgt: Tensor,
-    #         memory: Tensor,
-    #         arm: Optional[AttentionRefinementModule],
-    #         freqs_cis: Tensor,
-    #         tgt_mask: Optional[Tensor] = None,
-    #         memory_mask: Optional[Tensor] = None,
-    #         tgt_key_padding_mask: Optional[Tensor] = None,
-    #         memory_key_padding_mask: Optional[Tensor] = None,
-    # ) -> Tensor:
-    #     r"""Pass the inputs (and mask) through the decoder layer.
-    #
-    #     Args:
-    #         tgt: the sequence to the decoder layer (required).
-    #         memory: the sequence from the last layer of the encoder (required).
-    #         tgt_mask: the mask for the tgt sequence (optional).
-    #         memory_mask: the mask for the memory sequence (optional).
-    #         tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
-    #         memory_key_padding_mask: the mask for the memory keys per batch (optional).
-    #
-    #     Shape:
-    #         see the docs in Transformer class.
-    #     """
-    #     tgt_norm = self.norm1(tgt)  # pre-norm
-    #     tgt2 = self.self_attn(
-    #         tgt_norm, tgt_norm, tgt_norm, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask, freqs_cis=freqs_cis
-    #     )[0]
-    #     tgt = tgt + self.dropout1(tgt2)
-    #
-    #     tgt_norm = self.norm2(tgt)  # pre-norm
-    #     tgt2, attn = self.multihead_attn(
-    #         tgt_norm,
-    #         memory,
-    #         memory,
-    #         arm=arm,
-    #         attn_mask=memory_mask,
-    #         key_padding_mask=memory_key_padding_mask,
-    #     )
-    #     tgt = tgt + self.dropout2(tgt2)
-    #
-    #     tgt_norm = self.norm3(tgt)  # pre-norm
-    #     if self.use_moe:
-    #         tgt2, l_aux = self.ffn(tgt_norm)
-    #     else:
-    #         tgt2 = self.ffn(tgt_norm)
-    #         l_aux = None
-    #
-    #     tgt = tgt + self.dropout3(tgt2)
-    #     return tgt, attn, l_aux
-
     def forward(
             self,
             tgt: Tensor,
@@ -164,20 +113,44 @@ class TransformerDecoderLayer(nn.Module):
             tgt_key_padding_mask: Optional[Tensor] = None,
             freqs_cis: Optional[Tensor] = None,
     ) -> Tensor:
+        tgt_norm = self.norm1(tgt)  # pre-norm
         tgt2, attn = self.self_attn(
-            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
+            tgt_norm, tgt_norm, tgt_norm, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
             freqs_cis=freqs_cis
         )
         tgt = tgt + self.dropout1(tgt2)
-        tgt = self.norm1(tgt)  # post-norm
+
+        tgt_norm = self.norm2(tgt)  # pre-norm
         if self.use_moe:
-            tgt2, l_aux = self.ffn(tgt)
+            tgt2, l_aux = self.ffn(tgt_norm)
         else:
-            tgt2 = self.ffn(tgt)
+            tgt2 = self.ffn(tgt_norm)
             l_aux = None
+
         tgt = tgt + self.dropout2(tgt2)
-        tgt = self.norm2(tgt)  # post-norm
         return tgt, attn, l_aux
+
+    # def forward(
+    #         self,
+    #         tgt: Tensor,
+    #         tgt_mask: Optional[Tensor] = None,
+    #         tgt_key_padding_mask: Optional[Tensor] = None,
+    #         freqs_cis: Optional[Tensor] = None,
+    # ) -> Tensor:
+    #     tgt2, attn = self.self_attn(
+    #         tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
+    #         freqs_cis=freqs_cis
+    #     )
+    #     tgt = tgt + self.dropout1(tgt2)
+    #     tgt = self.norm1(tgt)  # post-norm
+    #     if self.use_moe:
+    #         tgt2, l_aux = self.ffn(tgt)
+    #     else:
+    #         tgt2 = self.ffn(tgt)
+    #         l_aux = None
+    #     tgt = tgt + self.dropout2(tgt2)
+    #     tgt = self.norm2(tgt)  # post-norm
+    #     return tgt, attn, l_aux
 
 
 class TransformerDecoder(nn.Module):
@@ -211,7 +184,7 @@ class TransformerDecoder(nn.Module):
             )
             for _ in range(num_layers)
         ])
-        # self.norm = nn.LayerNorm(d_model)
+        self.norm = nn.LayerNorm(d_model)
 
         # self.freqs_cis = precompute_freqs_cis(dim=d_model // nhead, end=end, theta=theta)
         # self.register_buffer("freqs_cis", freqs_cis, persistent=False)
@@ -237,7 +210,7 @@ class TransformerDecoder(nn.Module):
             if self.use_moe and cur_l_aux is not None:
                 l_aux += cur_l_aux
 
-        # output = self.norm(output)
+        output = self.norm(output)
 
         return output, l_aux
 
