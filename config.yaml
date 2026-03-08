@@ -51,7 +51,7 @@ model:
   # training
   learning_rate: 0.08
   patience: 16
-  group_decay: true
+  group_decay: false
   l_aux_weight: 0.01
   use_moe: false
   perturb_mode: "none" # none radom  structure_random

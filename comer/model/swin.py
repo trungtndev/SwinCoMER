@@ -29,16 +29,15 @@ class SwinEncoder(pl.LightningModule):
     def forward(self, x, mask):
         # x: [b, 1, h, w]
         features = self.swin(x)
-
-        mask = mask[:, 0::4, 0::4][:, 0::2, 0::2][:, 0::2, 0::2][:, 0::2, 0::2]
-
+        b, h, w, c = features.shape
+        mask = torch.zeros(b, h, w, device=self.device, dtype=torch.bool)
         return features, mask
 
 
 if __name__ == "__main__":
-    model = SwinEncoder(d_model=96)
-    x = torch.randn(2, 1, 224, 224)
-    mask = torch.ones(2, 224, 224).bool()
+    model = SwinEncoder(d_model=96).cuda()
+    x = torch.randn(2, 1, 224, 224).cuda()
+    mask = torch.ones(2, 224, 224).bool().cuda()
     out, mask = model(x, mask)
     print(out.shape)
     print(mask.shape)
