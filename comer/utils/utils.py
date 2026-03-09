@@ -123,7 +123,7 @@ def ce_loss(
 def perturb_random(
         tokens: torch.Tensor,
         valid_ids_tensor: torch.Tensor = RADOM_PERTURB_TOKEN,
-        prob: float = 0.1,
+        prob: float = 0.0,
 ):
     if prob <= 0:
         return tokens
@@ -144,7 +144,7 @@ def perturb_random(
 
 def perturb_structure_random(
         tokens: torch.Tensor,
-        prob: float = 0.1,
+        prob: float = 0.0,
         structure_perturb_token=NON_STRUCTURE_PERTURB_TOKEN,
 ):
     if prob <= 0:
@@ -174,7 +174,7 @@ def to_tgt_output(
         device: torch.device,
         pad_to_len: Optional[int] = None,
         perturb_mode: Optional[str] = None,
-        perturb_prob: float = 0.1,
+        perturb_prob: float = 0.0,
 ) -> Tuple[LongTensor, LongTensor]:
     """Generate tgt and out for indices
 
@@ -241,7 +241,7 @@ def to_tgt_output(
 
 
 def to_bi_tgt_out(
-        tokens: List[List[int]], device: torch.device, perturb_mode: str = "none", perturb_prob=0.1
+        tokens: List[List[int]], device: torch.device, perturb_mode: str = "none", perturb_prob=0.0
 ) -> Tuple[LongTensor, LongTensor]:
     """Generate bidirection tgt and out
 
