@@ -4,7 +4,33 @@ import cv2
 import numpy as np
 import torch
 from torch import Tensor
+import albumentations as A
 
+class AlbScaleAugmentation(A.ImageOnlyTransform):
+    def __init__(self, lo: float, hi: float, always_apply=False, p=1.0) -> None:
+        super().__init__(p)
+        assert lo <= hi
+        self.lo = lo
+        self.hi = hi
+
+    def apply(self, img: np.ndarray, **params) -> np.ndarray:
+        k = np.random.uniform(self.lo, self.hi)
+        img = cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_LINEAR)
+        return img
+
+class ResizeLimit(A.ImageOnlyTransform):
+    def __init__(self, height, width, always_apply=True, p=1.0):
+        super().__init__(p=p)
+        self.height = height
+        self.width = width
+
+    def apply(self, img, **params):
+        h, w = img.shape[:2]
+        scale = min(self.height / h, self.width / w)
+        new_h = int(h * scale)
+        new_w = int(w * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        return img
 
 class ScaleToLimitRange:
     def __init__(self, w_lo: int, w_hi: int, h_lo: int, h_hi: int) -> None:

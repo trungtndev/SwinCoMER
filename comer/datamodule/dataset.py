@@ -2,9 +2,9 @@ import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
 import numpy as np
 import random
+import albumentations as A
 
-
-from .transforms import ScaleAugmentation, ScaleToLimitRange
+from .transforms import ScaleAugmentation, ScaleToLimitRange, ResizeLimit, AlbScaleAugmentation
 
 K_MIN = 0.7
 K_MAX = 1.4
@@ -13,6 +13,43 @@ H_LO = 16
 H_HI = 256
 W_LO = 16
 W_HI = 1024
+
+# class CROHMEDataset(Dataset):
+#     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
+#         super().__init__()
+#         self.ds = ds
+#
+#         trans_list = []
+#         if is_train and scale_aug:
+#             trans_list.append(AlbScaleAugmentation(K_MIN, K_MAX))
+#
+#         trans_list += [
+#             ResizeLimit(height=256, width=512),
+#             A.PadIfNeeded(
+#                 min_height=256,
+#                 min_width=512,
+#                 fill=0,
+#                 position="center"
+#             ),
+#             A.ToRGB(),
+#             A.Normalize(
+#                 mean=(0.485, 0.456, 0.406),
+#                 std=(0.229, 0.224, 0.225)
+#             ),
+#             A.ToTensorV2(),
+#         ]
+#         self.transform = A.Compose(trans_list)
+#
+#     def __getitem__(self, idx):
+#         fname, img, caption = self.ds[idx]
+#
+#         # img = [self.transform(im) for im in img]
+#         img = self.transform(image=np.array(img))["image"]
+#
+#         return fname, img, caption
+#
+#     def __len__(self):
+#         return len(self.ds)
 
 class CROHMEDataset(Dataset):
     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
@@ -39,7 +76,6 @@ class CROHMEDataset(Dataset):
 
     def __len__(self):
         return len(self.ds)
-
 
 # class CROHMEDataset(Dataset):
 #     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
