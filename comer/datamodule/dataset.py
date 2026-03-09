@@ -1,11 +1,11 @@
 import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
 import numpy as np
-from PIL import Image
 import random
+from PIL import Image
 import albumentations as A
 
-from .transforms import ScaleAugmentation, ScaleToLimitRange, ResizeLimit, AlbScaleAugmentation
+from .transforms import AlbScaleAugmentation, ScaleToLimitRange, ScaleAugmentation, ResizeLimit
 
 K_MIN = 0.7
 K_MAX = 1.4
@@ -38,13 +38,15 @@ W_HI = 1024
 #                 std=(0.229, 0.224, 0.225)
 #             ),
 #             A.ToTensorV2(),
+#
 #         ]
 #         self.transform = A.Compose(trans_list)
 #
 #     def __getitem__(self, idx):
-#         fname, img, caption = self.ds[idx]
+#         fname, p, caption = self.ds[idx]
 #
 #         # img = [self.transform(im) for im in img]
+#         img = Image.open(f"{p}.bmp")
 #         img = self.transform(image=np.array(img))["image"]
 #
 #         return fname, img, caption
@@ -71,7 +73,7 @@ class CROHMEDataset(Dataset):
         fname, p, caption = self.ds[idx]
 
         # img = [self.transform(im) for im in img]
-        img = Image.open(f"{p}.bmp")  # Convert to grayscale
+        img = Image.open(f"{p}.bmp")
         img = self.transform(np.array(img))
 
         return fname, img, caption
