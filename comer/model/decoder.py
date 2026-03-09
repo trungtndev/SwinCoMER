@@ -186,6 +186,7 @@ class TransformerDecoder(nn.Module):
         ])
         self.norm = nn.LayerNorm(d_model)
 
+
         # self.freqs_cis = precompute_freqs_cis(dim=d_model // nhead, end=end, theta=theta)
         # self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
