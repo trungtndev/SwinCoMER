@@ -7,7 +7,7 @@ trainer:
 
   max_epochs: 300
   check_val_every_n_epoch: 4
-  num_sanity_val_steps: 1
+  num_sanity_val_steps: 0
   log_every_n_steps: 250
 
 callbacks:
