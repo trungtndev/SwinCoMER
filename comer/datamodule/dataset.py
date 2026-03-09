@@ -1,6 +1,7 @@
 import torchvision.transforms as tr
 from torch.utils.data.dataset import Dataset
 import numpy as np
+from PIL import Image
 import random
 import albumentations as A
 
@@ -67,9 +68,10 @@ class CROHMEDataset(Dataset):
         self.transform = tr.Compose(trans_list)
 
     def __getitem__(self, idx):
-        fname, img, caption = self.ds[idx]
+        fname, p, caption = self.ds[idx]
 
         # img = [self.transform(im) for im in img]
+        img = Image.open(f"{p}.bmp")  # Convert to grayscale
         img = self.transform(np.array(img))
 
         return fname, img, caption
