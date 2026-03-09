@@ -6,7 +6,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 
-from .transforms import AlbScaleAugmentation, AlbScaleToLimitRange, ScaleToLimitRange, ScaleAugmentation
+from .transforms import AlbScaleAugmentation, ScaleToLimitRange, ScaleAugmentation, ResizeLimit
 
 K_MIN = 0.7
 K_MAX = 1.4
@@ -26,7 +26,7 @@ W_HI = 1024
 #             trans_list.append(AlbScaleAugmentation(K_MIN, K_MAX))
 #
 #         trans_list += [
-#             AlbScaleToLimitRange(w_lo=16, w_hi=512, h_lo=16, h_hi=256),
+#             ResizeLimit(height=256, width=512),
 #             A.PadIfNeeded(
 #                 min_height=256,
 #                 min_width=512,
