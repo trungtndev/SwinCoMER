@@ -58,7 +58,7 @@ model:
   perturb_prob: 0.0
 
 data:
-  zipfile_path: data.zip
+  zipfile_path: data
   test_year: "2014"
   train_batch_size: 2
   eval_batch_size: 2

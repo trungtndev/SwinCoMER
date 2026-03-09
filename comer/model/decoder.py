@@ -93,7 +93,8 @@ class MoE(nn.Module):
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward, dropout, attn_dropout, qk_norm, use_moe, num_experts=None):
         super(TransformerDecoderLayer, self).__init__()
-        self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
+        # self.self_attn = MultiheadAttention(d_model, nhead, dropout=attn_dropout, qk_norm=qk_norm)
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=attn_dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
 
@@ -116,7 +117,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt_norm = self.norm1(tgt)  # pre-norm
         tgt2, attn = self.self_attn(
             tgt_norm, tgt_norm, tgt_norm, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask,
-            freqs_cis=freqs_cis
+            # freqs_cis=freqs_cis
         )
         tgt = tgt + self.dropout1(tgt2)
 
@@ -255,16 +256,24 @@ class Decoder(DecodeModel):
 
         self.proj = nn.Linear(d_model, vocab_size)
 
-    def _build_attention_mask(self, n_img, n_txt):
-        total = n_img + n_txt
-        mask = torch.zeros(total, total, dtype=torch.bool, device=self.device)
-
-        text_start = n_img
-        text_mask = torch.triu(
-            torch.ones(n_txt, n_txt, dtype=torch.bool, device=self.device), 1
+    # def _build_attention_mask(self, n_img, n_txt):
+    #     total = n_img + n_txt
+    #     mask = torch.zeros(total, total, dtype=torch.bool, device=self.device)
+    #
+    #     text_start = n_img
+    #     text_mask = torch.triu(
+    #         torch.ones(n_txt, n_txt, dtype=torch.bool, device=self.device), 1
+    #     )
+    #
+    #     mask[text_start:, text_start:] = text_mask
+    #     return mask
+    def _build_attention_mask(self, length):
+        # lazily create causal attention mask, with full attention between the vision tokens
+        # pytorch uses additive attention mask; fill with -inf
+        mask = torch.full(
+            (length, length), fill_value=1, dtype=torch.bool, device=self.device
         )
-
-        mask[text_start:, text_start:] = text_mask
+        mask.triu_(1)  # zero out the lower diagonal
         return mask
 
     def forward(
@@ -280,7 +289,7 @@ class Decoder(DecodeModel):
         tgt = self.pos_enc(tgt)
 
         tgt = torch.cat([src, tgt], dim=1)
-        tgt_mask = self._build_attention_mask(N, l)
+        tgt_mask = self._build_attention_mask(N + l)
         tgt_pad_mask = torch.cat([src_mask, tgt_pad_mask], dim=1)
 
         tgt = rearrange(tgt, "b l d -> l b d")
@@ -292,9 +301,9 @@ class Decoder(DecodeModel):
         )
 
         out = rearrange(out, "l b d -> b l d")
-        out = out[:, N:, :]
 
         out = self.proj(out)
+        out = out[:, N:, :]
 
         return out, l_aux
 

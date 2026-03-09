@@ -76,19 +76,21 @@ class CoMER(pl.LightningModule):
         mask = rearrange(mask, "b h w -> b (h w)")
 
         B = feature.shape[0]
-        cls_token = torch.full((B, 1), vocab.CLS_IDX, device=self.device)
-        sep_token = torch.full((B, 1), vocab.SEP_IDX, device=self.device)
-        cls_emb = self.decoder.word_embed(cls_token)
-        sep_emb = self.decoder.word_embed(sep_token)
+        img_start_token = torch.full((B, 1), vocab.IMG_START_IDX, device=self.device, dtype=torch.long)
+        img_end_token = torch.full((B, 1), vocab.IMG_END_IDX, device=self.device, dtype=torch.long)
+        img_start_emb = self.decoder.word_embed(img_start_token)
+        img_end_emb = self.decoder.word_embed(img_end_token)
 
-        cls_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
+        img_start_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
         img_end_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
 
-        feature = torch.cat((cls_emb, feature, sep_emb), dim=1)
-        mask = torch.cat((cls_mask, mask, img_end_mask), dim=1)
+        feature = torch.cat((img_start_emb, feature, img_end_emb), dim=1)
+        mask = torch.cat((img_start_mask, mask, img_end_mask), dim=1)
 
         feature = torch.cat((feature, feature), dim=0)  # [2b, t, d]
         mask = torch.cat((mask, mask), dim=0)
+
+
         out, l_aux = self.decoder(feature, mask, tgt)
 
         return out, l_aux
@@ -124,16 +126,16 @@ class CoMER(pl.LightningModule):
         mask = rearrange(mask, "b h w -> b (h w)")
 
         B = feature.shape[0]
-        cls_token = torch.full((B, 1), vocab.CLS_IDX, device=self.device)
-        sep_token = torch.full((B, 1), vocab.SEP_IDX, device=self.device)
-        cls_emb = self.decoder.word_embed(cls_token)
-        sep_emb = self.decoder.word_embed(sep_token)
+        img_start_token = torch.full((B, 1), vocab.IMG_START_IDX, device=self.device, dtype=torch.long)
+        img_end_token = torch.full((B, 1), vocab.IMG_END_IDX, device=self.device, dtype=torch.long)
+        img_start_emb = self.decoder.word_embed(img_start_token)
+        img_end_emb = self.decoder.word_embed(img_end_token)
 
-        cls_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
+        img_start_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
         img_end_mask = torch.zeros((B, 1), dtype=torch.bool, device=self.device)
 
-        feature = torch.cat((cls_emb, feature, sep_emb), dim=1)
-        mask = torch.cat((cls_mask, mask, img_end_mask), dim=1)
+        feature = torch.cat((img_start_emb, feature, img_end_emb), dim=1)
+        mask = torch.cat((img_start_mask, mask, img_end_mask), dim=1)
 
         return self.decoder.beam_search(
             [feature], [mask], beam_size, max_len, alpha, early_stopping, temperature
