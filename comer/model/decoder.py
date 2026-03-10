@@ -289,7 +289,7 @@ class Decoder(DecodeModel):
         tgt = self.pos_enc(tgt)
 
         tgt = torch.cat([src, tgt], dim=1)
-        tgt_mask = self._build_attention_mask(N, l)
+        tgt_mask = self._build_attention_mask(N+l)
         tgt_pad_mask = torch.cat([src_mask, tgt_pad_mask], dim=1)
 
         tgt = rearrange(tgt, "b l d -> l b d")
