@@ -255,25 +255,25 @@ class Decoder(DecodeModel):
 
         self.proj = nn.Linear(d_model, vocab_size)
 
-    # def _build_attention_mask(self, n_img, n_txt):
-    #     total = n_img + n_txt
-    #     mask = torch.zeros(total, total, dtype=torch.bool, device=self.device)
-    #
-    #     text_start = n_img
-    #     text_mask = torch.triu(
-    #         torch.ones(n_txt, n_txt, dtype=torch.bool, device=self.device), 1
-    #     )
-    #
-    #     mask[text_start:, text_start:] = text_mask
-    #     return mask
-    def _build_attention_mask(self, length):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.full(
-            (length, length), fill_value=1, dtype=torch.bool, device=self.device
+    def _build_attention_mask(self, n_img, n_txt):
+        total = n_img + n_txt
+        mask = torch.zeros(total, total, dtype=torch.bool, device=self.device)
+
+        text_start = n_img
+        text_mask = torch.triu(
+            torch.ones(n_txt, n_txt, dtype=torch.bool, device=self.device), 1
         )
-        mask.triu_(1)  # zero out the lower diagonal
+
+        mask[text_start:, text_start:] = text_mask
         return mask
+    # def _build_attention_mask(self, length):
+    #     # lazily create causal attention mask, with full attention between the vision tokens
+    #     # pytorch uses additive attention mask; fill with -inf
+    #     mask = torch.full(
+    #         (length, length), fill_value=1, dtype=torch.bool, device=self.device
+    #     )
+    #     mask.triu_(1)  # zero out the lower diagonal
+    #     return mask
 
     def forward(
             self, src: FloatTensor, src_mask: LongTensor, tgt: LongTensor
@@ -295,7 +295,7 @@ class Decoder(DecodeModel):
         tgt = self.pos_enc(tgt)
 
         tgt = torch.cat([img_start_emb ,src, img_end_emb, tgt], dim=1)
-        tgt_mask = self._build_attention_mask(h * w + 2 + l)
+        tgt_mask = self._build_attention_mask(h * w + 2, l)
         tgt_pad_mask = torch.cat([img_start_mask, src_mask, img_end_mask, tgt_pad_mask], dim=1)
 
         tgt = rearrange(tgt, "b l d -> l b d")
