@@ -4,7 +4,7 @@ import numpy as np
 import random
 from PIL import Image
 import albumentations as A
-
+import os
 from .transforms import AlbScaleAugmentation, ScaleToLimitRange, ScaleAugmentation, ResizeLimit
 
 K_MIN = 0.7
@@ -15,10 +15,22 @@ H_HI = 256
 W_LO = 16
 W_HI = 1024
 
+
+def find_image_path(base):
+    for ext in [".bmp", ".png", ".jpg", ".jpeg"]:
+        path = base + ext
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(base)
+
+
 # class CROHMEDataset(Dataset):
 #     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
 #         super().__init__()
-#         self.ds = ds
+#         self.ds = [
+#             (fname, find_image_path(p), caption)
+#             for fname, p, caption in ds
+#         ]
 #
 #         trans_list = []
 #         if is_train and scale_aug:
@@ -45,8 +57,7 @@ W_HI = 1024
 #     def __getitem__(self, idx):
 #         fname, p, caption = self.ds[idx]
 #
-#         # img = [self.transform(im) for im in img]
-#         img = Image.open(f"{p}.bmp")
+#         img = Image.open(p)
 #         img = self.transform(image=np.array(img))["image"]
 #
 #         return fname, img, caption
@@ -57,8 +68,10 @@ W_HI = 1024
 class CROHMEDataset(Dataset):
     def __init__(self, ds, is_train: bool, scale_aug: bool) -> None:
         super().__init__()
-        self.ds = ds
-
+        self.ds = [
+            (fname, find_image_path(p), caption)
+            for fname, p, caption in ds
+        ]
         trans_list = []
         if is_train and scale_aug:
             trans_list.append(ScaleAugmentation(K_MIN, K_MAX))
@@ -73,7 +86,7 @@ class CROHMEDataset(Dataset):
         fname, p, caption = self.ds[idx]
 
         # img = [self.transform(im) for im in img]
-        img = Image.open(f"{p}.bmp")
+        img = Image.open(p)
         img = self.transform(np.array(img))
 
         return fname, img, caption
