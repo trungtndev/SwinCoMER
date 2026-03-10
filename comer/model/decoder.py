@@ -187,7 +187,6 @@ class TransformerDecoder(nn.Module):
         ])
         self.norm = nn.LayerNorm(d_model)
 
-
         # self.freqs_cis = precompute_freqs_cis(dim=d_model // nhead, end=end, theta=theta)
         # self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
@@ -279,18 +278,25 @@ class Decoder(DecodeModel):
     def forward(
             self, src: FloatTensor, src_mask: LongTensor, tgt: LongTensor
     ) -> FloatTensor:
-
         b, l = tgt.size()
-        _, N, D = src.shape
+        _, h, w, _ = src.shape
+        src = rearrange(src, "b h w d -> b (h w) d")
+        src_mask = rearrange(src_mask, "b h w -> b (h w)")
+        img_start_token = torch.full((b, 1), vocab.IMG_START_IDX, device=self.device, dtype=torch.long)
+        img_end_token = torch.full((b, 1), vocab.IMG_END_IDX, device=self.device, dtype=torch.long)
+        img_start_emb = self.word_embed(img_start_token)
+        img_end_emb = self.word_embed(img_end_token)
+        img_start_mask = torch.zeros((b, 1), dtype=torch.bool, device=self.device)
+        img_end_mask = torch.zeros((b, 1), dtype=torch.bool, device=self.device)
 
         tgt_pad_mask = tgt == vocab.PAD_IDX
 
         tgt = self.word_embed(tgt)
         tgt = self.pos_enc(tgt)
 
-        tgt = torch.cat([src, tgt], dim=1)
-        tgt_mask = self._build_attention_mask(N+l)
-        tgt_pad_mask = torch.cat([src_mask, tgt_pad_mask], dim=1)
+        tgt = torch.cat([img_start_emb ,src, img_end_emb, tgt], dim=1)
+        tgt_mask = self._build_attention_mask(h * w + 2 + l)
+        tgt_pad_mask = torch.cat([img_start_mask, src_mask, img_end_mask, tgt_pad_mask], dim=1)
 
         tgt = rearrange(tgt, "b l d -> l b d")
 
@@ -303,7 +309,7 @@ class Decoder(DecodeModel):
         out = rearrange(out, "l b d -> b l d")
 
         out = self.proj(out)
-        out = out[:, N:, :]
+        out = out[:, h * w + 2:, :]
 
         return out, l_aux
 
