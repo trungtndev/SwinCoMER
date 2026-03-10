@@ -9,7 +9,7 @@ import torch
 from comer.datamodule.dataset import CROHMEDataset
 from PIL import Image
 from torch import FloatTensor, LongTensor
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from .vocab import vocab
 
@@ -17,13 +17,14 @@ Data = List[Tuple[str, Image.Image, List[str]]]
 
 MAX_SIZE = 32e4  # change here accroading to your GPU memory
 
+
 # load data
 def data_iterator(
-    data: Data,
-    batch_size: int,
-    batch_Imagesize: int = MAX_SIZE,
-    maxlen: int = 200,
-    maxImagesize: int = MAX_SIZE,
+        data: Data,
+        batch_size: int,
+        batch_Imagesize: int = MAX_SIZE,
+        maxlen: int = 200,
+        maxImagesize: int = MAX_SIZE,
 ):
     fname_batch = []
     feature_batch = []
@@ -151,13 +152,14 @@ def build_dataset(archive, folder: str, batch_size: int):
 
 class CROHMEDatamodule(pl.LightningDataModule):
     def __init__(
-        self,
-        zipfile_path: str = f"{os.path.dirname(os.path.realpath(__file__))}/../../data.zip",
-        test_year: str = "2014",
-        train_batch_size: int = 8,
-        eval_batch_size: int = 4,
-        num_workers: int = 5,
-        scale_aug: bool = False,
+            self,
+            zipfile_path: str = f"{os.path.dirname(os.path.realpath(__file__))}/../../data.zip",
+            test_year: str = "2014",
+            train_batch_size: int = 8,
+            eval_batch_size: int = 4,
+            num_workers: int = 5,
+            scale_aug: bool = False,
+            val_subset_size: Optional[int] = None,
     ) -> None:
         super().__init__()
         assert isinstance(test_year, str)
@@ -167,28 +169,37 @@ class CROHMEDatamodule(pl.LightningDataModule):
         self.eval_batch_size = eval_batch_size
         self.num_workers = num_workers
         self.scale_aug = scale_aug
+        self.val_subset_size = val_subset_size
 
         print(f"Load data from: {self.zipfile_path}")
 
     def setup(self, stage: Optional[str] = None) -> None:
-        # with ZipFile(self.zipfile_path) as archive:
-            if stage == "fit" or stage is None:
-                self.train_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, "train", self.train_batch_size),
-                    True,
-                    self.scale_aug,
-                )
-                self.val_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
-                    False,
-                    self.scale_aug,
-                )
-            if stage == "test" or stage is None:
-                self.test_dataset = CROHMEDataset(
-                    build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
-                    False,
-                    self.scale_aug,
-                )
+        if stage == "fit" or stage is None:
+            self.train_dataset = CROHMEDataset(
+                build_dataset(self.zipfile_path, "train", self.train_batch_size),
+                True,
+                self.scale_aug,
+            )
+
+            self.val_dataset = CROHMEDataset(
+                build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                False,
+                self.scale_aug,
+            )
+            if self.val_subset_size is not None and self.val_subset_size < len(self.val_dataset):
+                seed = 42
+                g = torch.Generator()
+                g.manual_seed(seed)
+                indices = torch.randperm(len(self.val_dataset), generator=g)[:self.val_subset_size]
+                self.val_dataset = Subset(self.val_dataset, indices)
+                print(f"Subset size: {len(self.val_dataset)} with seed: {seed}")
+
+        if stage == "test" or stage is None:
+            self.test_dataset = CROHMEDataset(
+                build_dataset(self.zipfile_path, self.test_year, self.eval_batch_size),
+                False,
+                self.scale_aug,
+            )
 
     def train_dataloader(self):
         return DataLoader(
