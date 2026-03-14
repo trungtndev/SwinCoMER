@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn.init import constant_, xavier_normal_, xavier_uniform_
-
+from .rope import apply_rotary_emb
 from .arm import AttentionRefinementModule
 
 
