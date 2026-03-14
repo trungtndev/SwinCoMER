@@ -8,6 +8,7 @@ import torch.optim as optim
 from torch import FloatTensor, LongTensor
 from timm.scheduler import CosineLRScheduler
 from timm.scheduler.scheduler import Scheduler
+import gc
 
 from comer.datamodule import Batch, vocab
 from comer.model.comer import CoMER
@@ -119,6 +120,18 @@ class LitCoMER(pl.LightningModule):
         """
         return self.comer_model(img, img_mask, tgt)
 
+    def _clean(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        torch.clear_autocast_cache()
+
+    def on_train_epoch_start(self):
+        self._clean()
+
+    def on_validation_epoch_start(self):
+        self._clean()
+
     def training_step(self, batch: Batch, _):
         tgt, out = to_bi_tgt_out(batch.indices, self.device, self.hparams.perturb_mode, self.hparams.perturb_prob)
         output = self(batch.imgs, batch.mask, tgt)
@@ -128,14 +141,14 @@ class LitCoMER(pl.LightningModule):
             loss = ce_loss(out_hat, out)
             l_aux = l_aux * self.hparams.l_aux_weight
             total_loss = loss + l_aux
-            self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("train_total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("train_l_aux", l_aux, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_loss", loss.detach(), on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_total_loss", total_loss.detach(), on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_l_aux", l_aux.detach(), on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
 
             return total_loss
         else:
             loss = ce_loss(out_hat, out)
-            self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("train_loss", loss.detach(), on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
             return loss
 
     @torch.inference_mode()
@@ -148,12 +161,12 @@ class LitCoMER(pl.LightningModule):
             loss = ce_loss(out_hat, out)
             l_aux = l_aux * self.hparams.l_aux_weight
             total_loss = loss + l_aux
-            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("val_total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("val_l_aux", l_aux, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_loss", loss.detach(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_total_loss", total_loss.detach(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_l_aux", l_aux.detach(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         else:
             loss = ce_loss(out_hat, out)
-            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("val_loss", loss.detach(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
 
         hyps = self.approximate_joint_search(batch.imgs, batch.mask)
 
