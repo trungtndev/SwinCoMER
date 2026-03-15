@@ -112,8 +112,7 @@ def basetop2gating(logits: torch.Tensor) -> Tuple[Tensor, Tensor, Tensor]:
     num_tokens = gates.shape[0]
     num_experts = gates.shape[1]
     # capacity = 2S/E
-    capacity = 2 * num_tokens // num_experts
-    assert num_tokens % num_experts == 0
+    capacity = (2 * num_tokens + num_experts - 1) // num_experts
 
     # Create a mask for 1st's expert per token
     indices1_s = torch.argmax(gates, dim=1)
