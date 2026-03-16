@@ -25,6 +25,7 @@ from comer.model.module.top2gate import Top2Gate, BaseTop2Gate
 
 from comer.utils.generation_utils import DecodeModel
 import warnings
+from deepspeed.moe.layer import MoE as DSMOELayer
 
 
 class SwiGLU(nn.Module):
@@ -59,24 +60,30 @@ class FFN(nn.Module):
 class MoE(nn.Module):
     def __init__(self, d_model, dim_feedforward, dropout, num_experts):
         super(MoE, self).__init__()
-        if dist.is_initialized():
-            world_size = dist.get_world_size()
-        else:
-            world_size = 1
-        assert num_experts % world_size == 0, \
-            "num_experts must be divisible by world_size"
-        num_local_experts = num_experts // world_size
+        # if dist.is_initialized():
+        #     world_size = dist.get_world_size()
+        # else:
+        #     world_size = 1
+        # assert num_experts % world_size == 0, \
+        #     "num_experts must be divisible by world_size"
+        # num_local_experts = num_experts // world_size
+        #
+        # warnings.warn(f"MoE world size: {world_size}")
+        # if num_local_experts == num_experts:
+        #     warnings.warn(f"Using MoE with {num_experts} experts on a single device.")
 
-        warnings.warn(f"MoE world size: {world_size}")
-        if num_local_experts == num_experts:
-            warnings.warn(f"Using MoE with {num_experts} experts on a single device.")
-
-        self.moe = BaseMOELayer(
-            BaseTop2Gate(model_dim=d_model, num_experts=num_experts),
-            nn.ModuleList([
-                FFN(d_model, dim_feedforward, dropout)
-                for _ in range(num_local_experts)
-            ])
+        # self.moe = BaseMOELayer(
+        #     BaseTop2Gate(model_dim=d_model, num_experts=num_experts),
+        #     nn.ModuleList([
+        #         FFN(d_model, dim_feedforward, dropout)
+        #         for _ in range(num_local_experts)
+        #     ])
+        # )
+        self.moe = DSMOELayer(
+            hidden_size=d_model,
+            expert=FFN(d_model, dim_feedforward, dropout),
+            num_experts=num_experts,
+            k=2,
         )
 
     def forward(self, x):
@@ -84,10 +91,10 @@ class MoE(nn.Module):
         # l_seq, b_size, d_model = x.shape
         # x = rearrange(x, "l b d -> (b l) 1 d")
         x = rearrange(x, "l b d -> b l d")
-        x = self.moe(x)
+        x, l_aux, exp_counts = self.moe(x)
         x = rearrange(x, "b l d -> l b d")
         # x = rearrange(x, "(b l) 1 d -> l b d", b=b_size, l=l_seq)
-        return x, self.moe.l_aux
+        return x, l_aux
 
 
 class TransformerDecoderLayer(nn.Module):

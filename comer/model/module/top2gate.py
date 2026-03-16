@@ -166,9 +166,7 @@ def basetop2gating(logits: torch.Tensor) -> Tuple[Tensor, Tensor, Tensor]:
     combine1_sec.add_(combine2_sec)
     combine_weights = combine1_sec
 
-    dispatch_mask = combine_weights.bool()
-
-    return l_aux.to(logits.dtype), combine_weights.to(logits.dtype), dispatch_mask
+    return l_aux.to(logits.dtype), combine_weights.to(logits.dtype), combine_weights.bool()
 
 class Top2Gate(torch.nn.Module):
     """Gate module which implements Top2Gating as described in Gshard_.
