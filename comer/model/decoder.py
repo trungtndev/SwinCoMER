@@ -25,7 +25,7 @@ from comer.model.module.top2gate import Top2Gate, BaseTop2Gate
 
 from comer.utils.generation_utils import DecodeModel
 import warnings
-from deepspeed.moe.layer import MoE as DSMOELayer
+# from deepspeed.moe.layer import MoE as DSMOELayer
 
 
 class SwiGLU(nn.Module):
