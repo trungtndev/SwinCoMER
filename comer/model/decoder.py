@@ -299,7 +299,7 @@ class Decoder(DecodeModel):
         super().__init__()
 
         self.word_embed = nn.Embedding(vocab_size, d_model)
-        self.pos_enc = WordPosEnc(d_model=d_model)
+        # self.pos_enc = WordPosEnc(d_model=d_model)
 
         self.model = TransformerDecoder(
             d_model=d_model,
@@ -353,7 +353,7 @@ class Decoder(DecodeModel):
         tgt_pad_mask = tgt == vocab.PAD_IDX
 
         tgt = self.word_embed(tgt)
-        tgt = self.pos_enc(tgt)
+        # tgt = self.pos_enc(tgt)
 
         h = src.shape[1]
         src = rearrange(src, "b h w d -> (h w) b d")
